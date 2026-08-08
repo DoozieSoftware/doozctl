@@ -1,4 +1,5 @@
 import { NotImplementedError } from "../errors.js";
+import { merge } from "./merge.js";
 import type {
   Analysis,
   Artifact,
@@ -76,22 +77,27 @@ export class DefaultValidator implements Validator {
 }
 
 /**
- * Default merge strategy (scaffolding). Each strategy has its own instance so
- * that distinct merge behavior can be attached per strategy without the engine
- * special-casing any artifact.
+ * Merge engine adapter: applies the frozen merge semantics from merge.ts.
+ * Each strategy resolves to a deterministic, text-only transformation.
  */
-class StubStrategyMerger implements StrategyMerger {
-  merge(_artifact: Artifact, _rendered: string, _existing: string | null): Promise<string> {
-    return notImplemented("merger")();
+class MergeEngineStrategy implements StrategyMerger {
+  constructor(private readonly strategy: MergeStrategy) {}
+  merge(_artifact: Artifact, rendered: string, existing: string | null): Promise<string> {
+    // A missing destination is written directly; merge only applies to files
+    // that already exist (frozen merge rule).
+    if (existing === null) {
+      return Promise.resolve(rendered);
+    }
+    return Promise.resolve(merge(this.strategy, existing, rendered));
   }
 }
 
-/** Maps every built-in merge strategy to its merger implementation. */
+/** Maps every built-in merge strategy to its real merge-engine implementation. */
 export function builtinMergers(): Record<MergeStrategy, StrategyMerger> {
   return {
-    "managed-blocks": new StubStrategyMerger(),
-    "replace-generated": new StubStrategyMerger(),
-    overwrite: new StubStrategyMerger(),
-    append: new StubStrategyMerger(),
+    "managed-blocks": new MergeEngineStrategy("managed-blocks"),
+    "replace-generated": new MergeEngineStrategy("replace-generated"),
+    overwrite: new MergeEngineStrategy("overwrite"),
+    append: new MergeEngineStrategy("append"),
   };
 }

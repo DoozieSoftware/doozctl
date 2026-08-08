@@ -8,7 +8,6 @@ import {
   type Analyzer,
   type Renderer,
   type StandardsLoader,
-  type StrategyMerger,
   type Validator,
 } from "./contracts.js";
 import { NotImplementedError } from "../errors.js";
@@ -44,10 +43,13 @@ describe("extension point contracts", () => {
     ]);
   });
 
-  it("built-in mergers are scaffolding", async () => {
-    const m: StrategyMerger = builtinMergers()["managed-blocks"];
-    await expect(m.merge({} as never, "rendered", null)).rejects.toBeInstanceOf(
-      NotImplementedError,
+  it("built-in mergers apply the frozen merge semantics", async () => {
+    const mergers = builtinMergers();
+    // overwrite replaces content outright.
+    await expect(mergers.overwrite.merge({} as never, "new", "old")).resolves.toBe("new");
+    // managed-blocks on a missing destination writes directly.
+    await expect(mergers["managed-blocks"].merge({} as never, "rendered", null)).resolves.toBe(
+      "rendered",
     );
   });
 });
