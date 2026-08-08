@@ -1,33 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { Artifact, Manifest, MergeStrategy, Session, StandardsPackage } from "./model.js";
+import type { Manifest, Session, StandardsPackage } from "./model.js";
 
 describe("model", () => {
-  it("models an artifact with every spec field", () => {
-    const artifact: Artifact = {
-      id: "agents",
-      source: "templates/AGENTS.md.hbs",
-      destination: "AGENTS.md",
-      variables: { language: "typescript" },
-      mergeStrategy: "managed-blocks",
-    };
-    expect(artifact.id).toBe("agents");
-    expect(artifact.source).toContain("AGENTS.md");
-    expect(artifact.destination).toBe("AGENTS.md");
-    expect(artifact.variables).toEqual({ language: "typescript" });
-    expect(artifact.mergeStrategy).toBe("managed-blocks");
-    expect(artifact.schema).toBeUndefined();
-  });
-
-  it("supports all four merge strategies", () => {
-    const strategies: MergeStrategy[] = [
-      "managed-blocks",
-      "replace-generated",
-      "overwrite",
-      "append",
-    ];
-    expect(strategies).toHaveLength(4);
-  });
-
   it("models a standards package manifest", () => {
     const pkg: StandardsPackage = {
       version: "1.0.0",

@@ -1,45 +1,23 @@
 /**
  * Domain types shared across the DoozCTL engine.
  *
- * The Artifact is the single core abstraction. Everything the engine renders,
- * merges, validates and writes is an Artifact: wrapper files (AGENTS.md etc.),
- * current context, session summaries, generated state — all treated
- * identically. Nothing is special-cased by file name or purpose.
+ * The canonical Artifact model lives in artifact.ts; it is re-exported here
+ * for consumers that import the domain types from this module.
  */
 
-/** Variables resolved from repository analysis, available during rendering. */
-export type Variables = Record<string, unknown>;
+export type {
+  Artifact,
+  ArtifactDestination,
+  ArtifactInput,
+  ArtifactMetadata,
+  ArtifactSource,
+  MergeStrategy,
+  Variables,
+  artifactEquals,
+  createArtifact,
+} from "./artifact.js";
 
-/** Controls how a generated artifact combines with existing on-disk content. */
-export type MergeStrategy =
-  /** Update managed sections only; preserve everything else. */
-  | "managed-blocks"
-  /** Replace previously generated files. */
-  | "replace-generated"
-  /** Replace the entire artifact. Used for generated state. */
-  | "overwrite"
-  /** Create new immutable artifacts. Used for session summaries. */
-  | "append";
-
-/**
- * A single generated artifact. Every command in the engine operates on this
- * type: rendered from a source template, merged per mergeStrategy, validated
- * against an optional schema, and written to destination.
- */
-export interface Artifact {
-  /** Stable identifier, used for manifest tracking and deduplication. */
-  id: string;
-  /** Template location within the Standards Package. */
-  source: string;
-  /** Target location inside the repository. */
-  destination: string;
-  /** Values substituted while rendering. */
-  variables: Variables;
-  /** Merge behavior. */
-  mergeStrategy: MergeStrategy;
-  /** Optional schema used during validation. */
-  schema?: string;
-}
+import type { Artifact, Variables } from "./artifact.js";
 
 /** Git facts about the analyzed repository. */
 export interface GitFacts {
