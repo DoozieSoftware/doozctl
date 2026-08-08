@@ -21,20 +21,24 @@ function analysis(overrides: Partial<Analysis> = {}): Analysis {
 }
 
 describe("resolveVariables", () => {
-  it("names analysis facts under the analysis namespace", () => {
+  it("groups analysis facts into analysis, repository and build namespaces", () => {
     expect(resolveVariables(analysis())).toEqual({
       analysis: {
         language: ["TypeScript"],
         framework: ["React"],
         tests: "vitest",
+      },
+      repository: {
         root: "/tmp/repo",
         git: { isRepository: true, branch: "main", dirty: false },
+        statistics: { totalFiles: 10, sourceFiles: 5, testFiles: 1 },
+        aiFiles: ["AGENTS.md"],
+      },
+      build: {
         buildSystem: "vite",
         packageManager: "pnpm",
         ci: ["github-actions"],
         docker: true,
-        statistics: { totalFiles: 10, sourceFiles: 5, testFiles: 1 },
-        aiFiles: ["AGENTS.md"],
       },
     });
   });
@@ -57,14 +61,18 @@ describe("resolveVariables", () => {
         language: [],
         framework: [],
         tests: null,
+      },
+      repository: {
         root: "/tmp/repo",
         git: { isRepository: true, branch: "main", dirty: false },
+        statistics: { totalFiles: 10, sourceFiles: 5, testFiles: 1 },
+        aiFiles: [],
+      },
+      build: {
         buildSystem: null,
         packageManager: null,
         ci: [],
         docker: false,
-        statistics: { totalFiles: 10, sourceFiles: 5, testFiles: 1 },
-        aiFiles: [],
       },
     });
   });
