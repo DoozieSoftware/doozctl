@@ -8,11 +8,11 @@ DoozCTL does not define engineering practices. It provides the engine that rende
 
 ## Philosophy
 
-* Minimal context. Minimal configuration.
-* Repository over conversation. Behavior over documentation.
-* Facts over prose. Deterministic over magical.
-* Brownfield first. Offline first. Vendor neutral.
-* Prefer preserving user-authored content over propagating generated content.
+- Minimal context. Minimal configuration.
+- Repository over conversation. Behavior over documentation.
+- Facts over prose. Deterministic over magical.
+- Brownfield first. Offline first. Vendor neutral.
+- Prefer preserving user-authored content over propagating generated content.
 
 ## Pipeline
 
@@ -93,10 +93,12 @@ The manifest is the only entry point:
   "version": "1.0.0",
   "engine": ">=1.0.0",
   "artifacts": [
-    { "id": "agents",
+    {
+      "id": "agents",
       "source": "artifacts/AGENTS.md",
       "destination": "AGENTS.md",
-      "merge": "managed-blocks" }
+      "merge": "managed-blocks"
+    }
   ]
 }
 ```
@@ -111,12 +113,12 @@ The merge engine knows only text. It never reads or writes files, never runs Git
 
 Four strategies, frozen:
 
-| Strategy | Behavior | Use |
-|----------|----------|-----|
-| `overwrite` | Replace entirely | generated machine state (`.dooz/manifest.json`) |
-| `append` | Add after, never modify | immutable session files |
-| `replace-generated` | Replace only if the file carries the generated marker, else fail | wrapper files |
-| `managed-blocks` | Replace only inside marked regions, preserve everything else | developer-facing files |
+| Strategy            | Behavior                                                         | Use                                             |
+| ------------------- | ---------------------------------------------------------------- | ----------------------------------------------- |
+| `overwrite`         | Replace entirely                                                 | generated machine state (`.dooz/manifest.json`) |
+| `append`            | Add after, never modify                                          | immutable session files                         |
+| `replace-generated` | Replace only if the file carries the generated marker, else fail | wrapper files                                   |
+| `managed-blocks`    | Replace only inside marked regions, preserve everything else     | developer-facing files                          |
 
 Managed block markers, frozen forever:
 
