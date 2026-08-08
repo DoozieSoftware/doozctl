@@ -3,6 +3,7 @@ import type {
   Analysis,
   Artifact,
   MergeStrategy,
+  RenderedArtifact,
   StandardsPackage,
   Variables,
 } from "../model/model.js";
@@ -28,7 +29,7 @@ export interface StandardsLoader {
 
 /** Artifact Renderer: turns a template into content using resolved variables. */
 export interface Renderer {
-  render(artifact: Artifact, variables: Variables): Promise<string>;
+  render(artifact: Artifact, variables: Variables): Promise<RenderedArtifact>;
 }
 
 /** Merge strategy: combines rendered content with existing on-disk content. */
@@ -62,7 +63,7 @@ export class DefaultStandardsLoader implements StandardsLoader {
 
 /** Default Renderer implementation (scaffolding). */
 export class DefaultRenderer implements Renderer {
-  render(_artifact: Artifact, _variables: Variables): Promise<string> {
+  render(_artifact: Artifact, _variables: Variables): Promise<RenderedArtifact> {
     return notImplemented("renderer")();
   }
 }

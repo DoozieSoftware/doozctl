@@ -291,6 +291,19 @@ Variable syntax is Mustache:
 
 Artifacts may reference these variables.
 
+## Rendering
+
+Rendering is the Mustache subset above and nothing else.
+
+* `{{dotted.path}}` placeholders are substituted against the variables.
+* Missing variables render as empty strings.
+* Values are rendered unescaped plain text (artifacts are Markdown, not HTML).
+* Arrays are comma-joined.
+* Output is UTF-8, normalized to LF line endings.
+* Rendering is deterministic: identical template and variables produce identical output.
+
+No helpers, functions, conditions, expressions, partials, includes, or scripting. Any `{{...}}` that is not a resolvable variable renders as an empty string.
+
 ---
 
 # Merge Strategies

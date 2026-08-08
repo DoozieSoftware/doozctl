@@ -76,6 +76,12 @@ export interface Artifact {
   readonly metadata: ArtifactMetadata;
 }
 
+/** An artifact paired with its rendered content. Never persisted as-is. */
+export interface RenderedArtifact {
+  readonly artifact: Artifact;
+  readonly content: string;
+}
+
 /** Input for createArtifact; optional fields receive defaults. */
 export interface ArtifactInput {
   readonly id: string;

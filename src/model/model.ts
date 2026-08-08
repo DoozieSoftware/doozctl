@@ -12,6 +12,7 @@ export type {
   ArtifactMetadata,
   ArtifactSource,
   MergeStrategy,
+  RenderedArtifact,
   Variables,
   artifactEquals,
   createArtifact,
