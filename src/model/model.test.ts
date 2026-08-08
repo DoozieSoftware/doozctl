@@ -4,10 +4,11 @@ import type { Manifest, Session, StandardsPackage } from "./model.js";
 describe("model", () => {
   it("models a standards package manifest", () => {
     const pkg: StandardsPackage = {
+      format: 1,
+      name: "@dooziesoft/standards",
       version: "1.0.0",
-      variables: { org: "doozie" },
+      engine: ">=1.0.0",
       artifacts: [],
-      schemas: { agents: "{}" },
     };
     expect(pkg.version).toBe("1.0.0");
     expect(pkg.artifacts).toEqual([]);

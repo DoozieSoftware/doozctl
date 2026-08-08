@@ -17,7 +17,7 @@ export type {
   createArtifact,
 } from "./artifact.js";
 
-import type { Artifact, Variables } from "./artifact.js";
+import type { Artifact } from "./artifact.js";
 
 /** Git facts about the analyzed repository. */
 export interface GitFacts {
@@ -64,18 +64,20 @@ export interface Analysis {
 }
 
 /**
- * A Standards Package manifest. The engine loads a package by its manifest —
+ * A loaded Standards Package. The engine loads a package by its manifest —
  * it never scans directories or invents artifacts.
  */
 export interface StandardsPackage {
-  /** Package version. */
+  /** Package structure format version, read by the loader. */
+  format: number;
+  /** Package name. */
+  name: string;
+  /** Version of the standards package itself. */
   version: string;
-  /** Package-level variables applied to every artifact. */
-  variables: Variables;
+  /** Required engine version range. Metadata only; not enforced. */
+  engine: string;
   /** The artifacts the package declares. */
   artifacts: Artifact[];
-  /** Schemas referenced by artifacts, keyed by id. */
-  schemas: Record<string, string>;
 }
 
 /** Records which artifacts the engine has generated. */
