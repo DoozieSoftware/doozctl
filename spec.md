@@ -57,39 +57,13 @@ Everything repository-specific comes from an external Standards Package.
 
 # Standards Package
 
-A Standards Package contains reusable repository artifacts.
+The Standards Package is an external dependency.
 
-Typical contents:
+Its internal structure, artifacts and contents are outside the scope of DoozCTL.
 
-```text
-standards/
+The engine interacts only through a published contract.
 
-AGENTS.md
-
-CLAUDE.md
-
-CODEX.md
-
-GEMINI.md
-
-CURSOR.md
-
-COPILOT.md
-
-OPENCODE.md
-
-current-context.md
-
-session.md
-
-schemas/
-
-manifest.json
-```
-
-The package is owned by the user or organization.
-
-DoozCTL never embeds company-specific standards.
+The engine must not assume or require any specific artifact names, repository layout or engineering standard.
 
 ---
 
