@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isGenerated, merge, MergeError } from "./merge.js";
+import { merge, MergeError } from "./merge.js";
 
 const BEGIN = "<!-- DOOZCTL:BEGIN:v1 section-name -->";
 const END = "<!-- DOOZCTL:END:v1 section-name -->";
@@ -45,11 +45,6 @@ describe("merge: replace-generated", () => {
   it("fails when the generated marker is on a version other than v1", () => {
     const existing = "<!-- DOOZCTL:GENERATED:v2 -->\nbody";
     expect(() => merge("replace-generated", existing, "x")).toThrow(MergeError);
-  });
-
-  it("detects generated files", () => {
-    expect(isGenerated(`${GENERATED}\nbody`)).toBe(true);
-    expect(isGenerated("plain")).toBe(false);
   });
 });
 
@@ -137,6 +132,35 @@ describe("merge: managed-blocks", () => {
     expect(out).toContain("mid");
     expect(out.indexOf("new-a")).toBeLessThan(out.indexOf("mid"));
   });
+
+  it("handles adjacent blocks with no boundary content", () => {
+    const mk = (name: string) => `<!-- DOOZCTL:BEGIN:v1 ${name} -->`;
+    const mkEnd = (name: string) => `<!-- DOOZCTL:END:v1 ${name} -->`;
+    const ex = [mk("a"), "old-a", mkEnd("a"), mk("b"), "old-b", mkEnd("b")].join("\n");
+    const ren = [mk("a"), "new-a", mkEnd("a"), mk("b"), "new-b", mkEnd("b")].join("\n");
+    const out = merge("managed-blocks", ex, ren);
+    expect(out).toContain("new-a");
+    expect(out).toContain("new-b");
+    expect(out.indexOf(mkEnd("a"))).toBeLessThan(out.indexOf(mk("b")));
+  });
+
+  it("handles empty blocks", () => {
+    const mk = (name: string) => `<!-- DOOZCTL:BEGIN:v1 ${name} -->`;
+    const mkEnd = (name: string) => `<!-- DOOZCTL:END:v1 ${name} -->`;
+    const ex = [mk("a"), mkEnd("a")].join("\n");
+    const ren = [mk("a"), "fresh", mkEnd("a")].join("\n");
+    expect(merge("managed-blocks", ex, ren)).toBe(ren);
+  });
+
+  it("supports section names containing hyphens and dots", () => {
+    const mk = (name: string) => `<!-- DOOZCTL:BEGIN:v1 ${name} -->`;
+    const mkEnd = (name: string) => `<!-- DOOZCTL:END:v1 ${name} -->`;
+    const ex = [mk("repo-analysis.v2"), "old", mkEnd("repo-analysis.v2")].join("\n");
+    const ren = [mk("repo-analysis.v2"), "new", mkEnd("repo-analysis.v2")].join("\n");
+    const out = merge("managed-blocks", ex, ren);
+    expect(out).toContain("new");
+    expect(out).not.toContain("old");
+  });
 });
 
 describe("merge: managed-blocks errors", () => {
@@ -165,6 +189,14 @@ describe("merge: managed-blocks errors", () => {
   it("fails on nested markers", () => {
     const nested = [BEGIN, "outer", BEGIN, "inner", END, "outer-end", END].join("\n");
     const ren = `${BEGIN}\nx\n${END}`;
+    expect(() => merge("managed-blocks", nested, ren)).toThrow(MergeError);
+  });
+
+  it("fails on nested markers with different names", () => {
+    const mk = (name: string) => `<!-- DOOZCTL:BEGIN:v1 ${name} -->`;
+    const mkEnd = (name: string) => `<!-- DOOZCTL:END:v1 ${name} -->`;
+    const nested = [mk("outer"), mk("inner"), "x", mkEnd("inner"), mkEnd("outer")].join("\n");
+    const ren = [mk("outer"), "x", mkEnd("outer")].join("\n");
     expect(() => merge("managed-blocks", nested, ren)).toThrow(MergeError);
   });
 

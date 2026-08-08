@@ -378,6 +378,8 @@ Update only the content inside managed blocks.
 
 Everything outside the managed blocks remains untouched.
 
+Managed-blocks never propagates surrounding boilerplate. Content outside the managed regions is intentionally preserved; boilerplate updates require `replace-generated` or manual edits.
+
 ### Managed Block Markers
 
 Frozen forever. No alternatives.

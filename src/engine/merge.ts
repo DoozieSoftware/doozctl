@@ -15,7 +15,6 @@ import type { MergeStrategy } from "../model/model.js";
 /** Frozen marker prefix. Do not evolve; a new format requires a new version. */
 const BEGIN_PREFIX = "<!-- DOOZCTL:BEGIN:v1";
 const END_PREFIX = "<!-- DOOZCTL:END:v1";
-const GENERATED = "<!-- DOOZCTL:GENERATED:v1";
 
 /** Any managed-block marker line (BEGIN or END). */
 const MANAGED_LINE = /^<!-- DOOZCTL:(BEGIN|END):v1 /;
@@ -78,11 +77,10 @@ function parseBlocks(content: string): Block[] {
       continue;
     }
 
-    // Any line that is clearly an intended marker but does not parse is an error.
-    if (MANAGED_LINE.test(line) || GENERATED_LINE.test(line)) {
-      if (line.includes("DOOZCTL:BEGIN") || line.includes("DOOZCTL:END")) {
-        throw new MergeError(`malformed marker on line ${i + 1}`);
-      }
+    // Any line that is clearly an intended managed marker but does not parse
+    // is an error. The generated marker is only consulted by replace-generated.
+    if (MANAGED_LINE.test(line)) {
+      throw new MergeError(`malformed marker on line ${i + 1}`);
     }
   }
 
@@ -179,10 +177,3 @@ export function merge(strategy: MergeStrategy, existing: string, rendered: strin
     }
   }
 }
-
-/** True when the content carries the engine-generated marker. */
-export function isGenerated(content: string): boolean {
-  return GENERATED_LINE.test(content.split("\n", 1)[0] as string);
-}
-
-export { GENERATED, BEGIN_PREFIX, END_PREFIX };
