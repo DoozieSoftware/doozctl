@@ -30,6 +30,7 @@ AI coding assistants become interchangeable execution engines.
 * Brownfield first.
 * Offline first.
 * Vendor neutral.
+* Prefer preserving user-authored content over propagating generated content.
 
 ---
 

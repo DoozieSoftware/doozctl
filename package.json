@@ -1,6 +1,6 @@
 {
   "name": "@dooziesoft/doozctl",
-  "version": "0.1.0-alpha.1",
+  "version": "0.3.0-alpha.1",
   "description": "A lightweight, vendor-neutral CLI that installs and maintains AI repository standards.",
   "type": "module",
   "license": "MIT",
