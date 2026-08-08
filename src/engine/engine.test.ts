@@ -28,15 +28,15 @@ describe("Engine", () => {
     const engine = new Engine();
     const steps: PipelineStep[] = [
       async (ctx) => {
-        ctx.analysis = { language: "typescript" } as never;
+        ctx.analysis = { languages: ["TypeScript"] } as never;
       },
       async (ctx) => {
-        observed = ctx.analysis?.language ?? null;
+        observed = ctx.analysis?.languages[0] ?? null;
       },
     ];
 
     await engine.run({ root: ".", standardsDir: "" }, steps);
-    expect(observed).toBe("typescript");
+    expect(observed).toBe("TypeScript");
   });
 
   it("executes exactly the steps it is given", async () => {

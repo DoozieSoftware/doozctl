@@ -41,19 +41,48 @@ export interface Artifact {
   schema?: string;
 }
 
+/** Git facts about the analyzed repository. */
+export interface GitFacts {
+  /** Whether dir is inside a git repository. */
+  isRepository: boolean;
+  /** Current branch, or null when not a repository or detached HEAD. */
+  branch: string | null;
+  /** Whether the working tree differs from HEAD. */
+  dirty: boolean;
+}
+
+/** File counts used to size the repository. */
+export interface RepositoryStatistics {
+  totalFiles: number;
+  sourceFiles: number;
+  testFiles: number;
+}
+
 /**
  * Factual repository metadata. No recommendations, no opinions.
  * Repository analysis becomes variables available during rendering.
  */
 export interface Analysis {
-  language: string;
-  framework: string;
-  architecture: string;
-  packageManager: string;
-  buildSystem: string;
-  testFramework: string;
+  /** Absolute path of the analyzed repository root. */
+  root: string;
+  git: GitFacts;
+  /** Detected programming languages, sorted. */
+  languages: string[];
+  /** Detected frameworks, sorted. */
+  frameworks: string[];
+  /** Detected build system, or null when none is recognized. */
+  buildSystem: string | null;
+  /** Detected package manager, or null when none is recognized. */
+  packageManager: string | null;
+  /** Detected test framework, or null when none is recognized. */
+  testFramework: string | null;
+  /** Detected CI providers, sorted. */
+  ci: string[];
+  /** Whether a Docker configuration is present. */
   docker: boolean;
-  ci: boolean;
+  statistics: RepositoryStatistics;
+  /** AI-related files present in the repository, detected only. */
+  aiFiles: string[];
 }
 
 /**

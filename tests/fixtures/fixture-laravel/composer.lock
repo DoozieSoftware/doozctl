@@ -1,0 +1,9 @@
+{
+    "_readme": ["This file is a fixture placeholder."],
+    "packages": [],
+    "packages-dev": [],
+    "aliases": [],
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "content-hash": "fixture"
+}
