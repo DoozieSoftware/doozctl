@@ -1,7 +1,6 @@
-import { promises as fs } from "node:fs";
-import path from "node:path";
 import { createArtifact, MERGE_STRATEGIES } from "../model/artifact.js";
 import type { Artifact, MergeStrategy, StandardsPackage } from "../model/model.js";
+import { Storage } from "../store/storage.js";
 import type { StandardsLoader } from "./contracts.js";
 
 /**
@@ -10,9 +9,10 @@ import type { StandardsLoader } from "./contracts.js";
  * Reads the manifest, validates only what the contract requires (package
  * exists, JSON valid, artifact source exists, merge strategy valid, supported
  * format), and returns the declared artifacts. It knows nothing about artifact
- * names, AGENTS.md, rendering, or variables. Artifact source paths are kept
- * inside the package directory so a package can never reference files outside
- * itself.
+ * names, AGENTS.md, rendering, or variables. All filesystem access goes
+ * through Storage, which keeps a package from probing paths outside itself.
+ * Destination paths are intentionally not validated here — the contract
+ * validates sources only; destinations are guarded by Storage when written.
  */
 
 const MANIFEST_FILE = "package.json";
@@ -30,32 +30,42 @@ interface ManifestJson {
 /** Loads a Standards Package from a plain directory. */
 export class StandardsPackageLoader implements StandardsLoader {
   async load(dir: string): Promise<StandardsPackage> {
-    const manifestPath = path.join(dir, MANIFEST_FILE);
-    const manifest = await this.readManifest(manifestPath);
-    const format = this.assertFormat(manifest.format, dir);
+    const store = new Storage(dir);
+    const manifest = await this.readManifest(store);
+    const format = this.assertFormat(manifest.format, store.root);
     return {
       format,
       name: this.string(manifest.name, "name"),
       version: this.string(manifest.version, "version"),
       engine: this.string(manifest.engine, "engine"),
-      artifacts: await this.loadArtifacts(dir, manifest.artifacts),
+      artifacts: await this.loadArtifacts(store, manifest.artifacts),
     };
   }
 
-  private async readManifest(manifestPath: string): Promise<ManifestJson> {
+  /** Read and parse the manifest, wrapping only the JSON parse failure. */
+  private async readManifest(store: Storage): Promise<ManifestJson> {
     let raw: string;
     try {
-      raw = await fs.readFile(manifestPath, "utf-8");
-    } catch {
-      throw new Error(`standards package not found: ${manifestPath}`);
-    }
-    try {
-      return JSON.parse(raw) as ManifestJson;
+      raw = await store.read(MANIFEST_FILE);
     } catch (error) {
-      throw new Error(`invalid standards package: ${manifestPath}: invalid JSON`, {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        throw new Error(`standards package not found: ${store.resolve(MANIFEST_FILE)}`);
+      }
+      throw error;
+    }
+    let manifest: unknown;
+    try {
+      manifest = JSON.parse(raw);
+    } catch (error) {
+      throw new Error(`invalid standards package: ${store.resolve(MANIFEST_FILE)}: invalid JSON`, {
         cause: error,
       });
     }
+    const parsed = this.record(manifest);
+    if (parsed === null) {
+      throw new Error("invalid standards package: manifest must be an object");
+    }
+    return parsed as ManifestJson;
   }
 
   private assertFormat(format: unknown, dir: string): number {
@@ -65,28 +75,28 @@ export class StandardsPackageLoader implements StandardsLoader {
     return SUPPORTED_FORMAT;
   }
 
-  private async loadArtifacts(dir: string, rawArtifacts: unknown): Promise<Artifact[]> {
+  private async loadArtifacts(store: Storage, rawArtifacts: unknown): Promise<Artifact[]> {
     if (!Array.isArray(rawArtifacts)) {
-      throw new Error(`invalid standards package: ${dir}: artifacts must be an array`);
+      throw new Error(`invalid standards package: ${store.root}: artifacts must be an array`);
     }
     const artifacts: Artifact[] = [];
     for (const entry of rawArtifacts) {
-      artifacts.push(await this.loadArtifact(dir, entry));
+      artifacts.push(await this.loadArtifact(store, entry));
     }
     return artifacts;
   }
 
-  private async loadArtifact(dir: string, raw: unknown): Promise<Artifact> {
+  private async loadArtifact(store: Storage, raw: unknown): Promise<Artifact> {
     const json = this.record(raw);
     if (json === null) {
-      throw new Error(`invalid standards package: ${dir}: artifact must be an object`);
+      throw new Error(`invalid standards package: ${store.root}: artifact must be an object`);
     }
     const id = this.string(json.id, "id");
     const source = this.string(json.source, "source");
     const destination = this.string(json.destination, "destination");
     const merge = this.string(json.merge, "merge");
     this.assertMergeStrategy(merge);
-    await this.assertSourceExists(dir, source);
+    await this.assertSourceExists(store, source);
     return createArtifact({
       id,
       source: { path: source },
@@ -101,24 +111,11 @@ export class StandardsPackageLoader implements StandardsLoader {
     }
   }
 
-  private async assertSourceExists(dir: string, source: string): Promise<void> {
-    const sourcePath = this.withinPackage(dir, source);
-    try {
-      await fs.access(sourcePath);
-    } catch {
+  private async assertSourceExists(store: Storage, source: string): Promise<void> {
+    store.resolve(source); // enforces containment; rejects paths escaping the package
+    if (!(await store.exists(source))) {
       throw new Error(`invalid standards package: artifact source not found: ${source}`);
     }
-  }
-
-  /** Resolve a manifest-relative path, rejecting any that escapes the package. */
-  private withinPackage(dir: string, rel: string): string {
-    const joined = path.join(dir, rel);
-    const resolved = path.resolve(joined);
-    const base = path.resolve(dir);
-    if (resolved !== base && !resolved.startsWith(base + path.sep)) {
-      throw new Error(`invalid standards package: artifact source escapes package: ${rel}`);
-    }
-    return resolved;
   }
 
   private string(value: unknown, field: string): string {

@@ -391,20 +391,20 @@ Display repository status.
 DoozCTL maintains:
 
 ```text
-.ai/
+.dooz/
 
 manifest.json
 
-repository-analysis.json
+.ai/
 
 current-context.md
+
+repository-analysis.json
 
 sessions/
 ```
 
-These files belong to the engine.
-
-They are regenerated as required.
+`.dooz/` holds engine state. `.ai/` holds AI-readable memory. These files belong to the engine. They are regenerated as required.
 
 ---
 

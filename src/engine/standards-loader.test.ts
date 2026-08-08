@@ -148,7 +148,34 @@ describe("StandardsPackageLoader", () => {
       ...validManifest,
       artifacts: [{ ...validManifest.artifacts[0], source: "../outside.md" }],
     });
-    await expect(loader.load(dir)).rejects.toThrow(/escapes package/);
+    await expect(loader.load(dir)).rejects.toThrow(/escapes sandbox root/);
+  });
+
+  it("rejects a manifest that is not an object", async () => {
+    const dir = await tmp();
+    await writeFile(path.join(dir, "package.json"), "42", "utf-8");
+    await expect(loader.load(dir)).rejects.toThrow(/manifest must be an object/);
+  });
+
+  it("rejects artifacts that are not an array", async () => {
+    const dir = await tmp();
+    await writePackage(dir, { ...validManifest, artifacts: "not-an-array" });
+    await expect(loader.load(dir)).rejects.toThrow(/artifacts must be an array/);
+  });
+
+  it("rejects a non-string manifest field", async () => {
+    const dir = await tmp();
+    await writePackage(dir, { ...validManifest, name: 42 });
+    await expect(loader.load(dir)).rejects.toThrow(/missing name/);
+  });
+
+  it("rejects a non-string artifact field", async () => {
+    const dir = await tmp();
+    await writePackage(dir, {
+      ...validManifest,
+      artifacts: [{ ...validManifest.artifacts[0], destination: 42 }],
+    });
+    await expect(loader.load(dir)).rejects.toThrow(/missing destination/);
   });
 
   it("is deterministic for identical packages", async () => {
