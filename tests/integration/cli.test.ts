@@ -11,9 +11,9 @@ import {
   DefaultStandardsLoader,
   DefaultValidator,
 } from "../../src/engine/contracts.js";
-import { FileSystem } from "../../src/infra/fs/fs.js";
 import { GitService } from "../../src/infra/git/git.js";
 import { RepositoryStore } from "../../src/store/repository-store.js";
+import { Storage } from "../../src/store/storage.js";
 
 /**
  * End-to-end smoke tests: exercise the full CLI wiring (composition root →
@@ -24,7 +24,7 @@ import { RepositoryStore } from "../../src/store/repository-store.js";
 function buildDeps(): AppDeps {
   return {
     git: new GitService(),
-    fs: new FileSystem(process.cwd()),
+    fs: new Storage(process.cwd()),
     store: new RepositoryStore(),
     analyzer: new DefaultAnalyzer(),
     loader: new DefaultStandardsLoader(),

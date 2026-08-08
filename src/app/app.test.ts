@@ -9,14 +9,14 @@ import {
   DefaultStandardsLoader,
   DefaultValidator,
 } from "../engine/contracts.js";
-import { FileSystem } from "../infra/fs/fs.js";
 import { GitService } from "../infra/git/git.js";
 import { RepositoryStore } from "../store/repository-store.js";
+import { Storage } from "../store/storage.js";
 
 function buildDeps(): AppDeps {
   return {
     git: new GitService(),
-    fs: new FileSystem(process.cwd()),
+    fs: new Storage(process.cwd()),
     store: new RepositoryStore(),
     analyzer: new DefaultAnalyzer(),
     loader: new DefaultStandardsLoader(),

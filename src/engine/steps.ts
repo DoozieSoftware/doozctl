@@ -1,7 +1,7 @@
 import { NotImplementedError } from "../errors.js";
-import type { FileSystem } from "../infra/fs/fs.js";
 import type { GitService } from "../infra/git/git.js";
 import type { RepositoryStore } from "../store/repository-store.js";
+import type { Storage } from "../store/storage.js";
 import type { ExecutionContext, PipelineStep } from "./engine.js";
 import type {
   Analyzer,
@@ -85,7 +85,7 @@ export function validateStep(_deps: ValidateDeps): PipelineStep {
 
 /** Dependencies for the write step. */
 export interface WriteDeps {
-  fs: FileSystem;
+  fs: Storage;
   store: RepositoryStore;
 }
 
