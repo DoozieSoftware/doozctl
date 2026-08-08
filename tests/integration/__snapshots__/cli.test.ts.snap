@@ -1,0 +1,26 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`doozctl CLI (integration) > renders a deterministic help snapshot 1`] = `
+"Usage: doozctl [options] [command]
+
+Install and maintain AI repository standards.
+
+Options:
+  -V, --version        output the version number
+  -h, --help           display help for command
+
+Commands:
+  analyze [args...]
+  doctor [args...]
+  init [args...]
+  status [args...]
+  summarize [args...]
+  sync [args...]
+  help [command]       display help for command
+"
+`;
+
+exports[`doozctl CLI (integration) > renders a deterministic version snapshot 1`] = `
+"0.1.0-alpha.1
+"
+`;
