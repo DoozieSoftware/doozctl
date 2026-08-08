@@ -2,35 +2,26 @@ import { describe, expect, it } from "vitest";
 import {
   builtinMergers,
   DefaultAnalyzer,
-  DefaultRenderer,
   DefaultStandardsLoader,
   DefaultValidator,
-  type Analyzer,
-  type Renderer,
-  type StandardsLoader,
-  type Validator,
 } from "./contracts.js";
-import { NotImplementedError } from "../errors.js";
 
 describe("extension point contracts", () => {
-  it("default analyzer is scaffolding", async () => {
-    const a: Analyzer = new DefaultAnalyzer();
-    await expect(a.analyze(".")).rejects.toBeInstanceOf(NotImplementedError);
+  it("default analyzer delegates to the repository analyzer", async () => {
+    const git = { detect: async () => null };
+    const analysis = await new DefaultAnalyzer(git).analyze(".");
+    expect(analysis).toMatchObject({ root: expect.any(String), languages: expect.any(Array) });
   });
 
-  it("default standards loader is scaffolding", async () => {
-    const l: StandardsLoader = new DefaultStandardsLoader();
-    await expect(l.load(".")).rejects.toBeInstanceOf(NotImplementedError);
+  it("default standards loader delegates to the package loader", async () => {
+    const loader = new DefaultStandardsLoader();
+    await expect(loader.load("/does/not/exist")).rejects.toThrow(/standards package not found/);
   });
 
-  it("default renderer is scaffolding", async () => {
-    const r: Renderer = new DefaultRenderer();
-    await expect(r.render({} as never, {})).rejects.toBeInstanceOf(NotImplementedError);
-  });
-
-  it("default validator is scaffolding", async () => {
-    const v: Validator = new DefaultValidator();
-    await expect(v.validate("content", null)).rejects.toBeInstanceOf(NotImplementedError);
+  it("default validator accepts any content", async () => {
+    const v = new DefaultValidator();
+    await expect(v.validate("content", "schemas/a.json")).resolves.toBeUndefined();
+    await expect(v.validate("content", null)).resolves.toBeUndefined();
   });
 
   it("provides a merger for every built-in merge strategy", () => {

@@ -4,7 +4,6 @@ import type {
   AnalyzeDeps,
   LoadDeps,
   MergeDeps,
-  RenderDeps,
   SaveAnalysisDeps,
   ValidateDeps,
   WriteDeps,
@@ -28,7 +27,7 @@ import {
 
 /** Infrastructure dependencies for the application. */
 export interface AppDeps
-  extends AnalyzeDeps, LoadDeps, RenderDeps, MergeDeps, ValidateDeps, WriteDeps, SaveAnalysisDeps {}
+  extends AnalyzeDeps, LoadDeps, MergeDeps, ValidateDeps, WriteDeps, SaveAnalysisDeps {}
 
 /** Composition root of the application. */
 export class App {
@@ -71,7 +70,7 @@ export class App {
   }
 
   private async run(steps: PipelineStep[], args: string[]): Promise<number> {
-    await this.engine.run({ root: args[0] ?? ".", standardsDir: "" }, steps);
+    await this.engine.run({ root: args[0] ?? ".", standardsDir: args[1] ?? "" }, steps);
     return 0;
   }
 }

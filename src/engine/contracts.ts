@@ -1,5 +1,6 @@
-import { NotImplementedError } from "../errors.js";
 import { merge } from "./merge.js";
+import { RepositoryAnalyzer, type GitDetector } from "./repository-analyzer.js";
+import { StandardsPackageLoader } from "./standards-loader.js";
 import type {
   Analysis,
   Artifact,
@@ -13,9 +14,13 @@ import type {
  * Extension point contracts.
  *
  * These interfaces are the seams the spec's extensibility requires: custom
- * analyzers, loaders, renderers, merge strategies, and validators plug in here.
- * Real runtime plugin discovery is deferred until it is needed; the default
- * implementations below are scaffolding that throw NotImplementedError.
+ * analyzers, loaders, merge strategies, and validators plug in here. Real
+ * runtime plugin discovery is deferred until it is needed; the default
+ * implementations below delegate to the built-in engine implementations.
+ *
+ * The default renderer is not exposed here: templates live inside the Standards
+ * Package, whose root is known only per run, so the render step constructs the
+ * built-in ArtifactRenderer against the run's package directory.
  */
 
 /** Repository Analyzer: produces factual repository metadata. */
@@ -43,36 +48,35 @@ export interface Validator {
   validate(content: string, schema: string | null): Promise<void>;
 }
 
-const notImplemented =
-  (name: string) =>
-  (..._args: unknown[]): Promise<never> =>
-    Promise.reject(new NotImplementedError(name));
-
-/** Default Analyzer implementation (scaffolding). */
+/** Default Analyzer implementation backed by the repository analyzer. */
 export class DefaultAnalyzer implements Analyzer {
-  analyze(_dir: string): Promise<Analysis> {
-    return notImplemented("analyzer")();
+  private readonly impl: Analyzer;
+
+  constructor(git: GitDetector) {
+    this.impl = new RepositoryAnalyzer({ git });
+  }
+
+  analyze(dir: string): Promise<Analysis> {
+    return this.impl.analyze(dir);
   }
 }
 
-/** Default Standards Loader implementation (scaffolding). */
+/** Default Standards Loader implementation backed by the package loader. */
 export class DefaultStandardsLoader implements StandardsLoader {
-  load(_dir: string): Promise<StandardsPackage> {
-    return notImplemented("loader")();
+  private readonly impl = new StandardsPackageLoader();
+
+  load(dir: string): Promise<StandardsPackage> {
+    return this.impl.load(dir);
   }
 }
 
-/** Default Renderer implementation (scaffolding). */
-export class DefaultRenderer implements Renderer {
-  render(_artifact: Artifact, _variables: Variables): Promise<RenderedArtifact> {
-    return notImplemented("renderer")();
-  }
-}
-
-/** Default Validator implementation (scaffolding). */
+/**
+ * Default Validator implementation. Schema validation is a later phase; the
+ * built-in validator currently accepts any content so the pipeline completes.
+ */
 export class DefaultValidator implements Validator {
   validate(_content: string, _schema: string | null): Promise<void> {
-    return notImplemented("validator")();
+    return Promise.resolve();
   }
 }
 

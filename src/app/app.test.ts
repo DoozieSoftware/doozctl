@@ -1,26 +1,37 @@
-import { describe, expect, it } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterAll, describe, expect, it } from "vitest";
 import { App, type AppDeps } from "./app.js";
 import { NotImplementedError } from "../errors.js";
 import { Engine } from "../engine/engine.js";
 import {
   builtinMergers,
   DefaultAnalyzer,
-  DefaultRenderer,
   DefaultStandardsLoader,
   DefaultValidator,
 } from "../engine/contracts.js";
 import { GitService } from "../infra/git/git.js";
 import { RepositoryStore } from "../store/repository-store.js";
-import { Storage } from "../store/storage.js";
+
+const dirs: string[] = [];
+afterAll(async () => {
+  await Promise.all(dirs.map((d) => rm(d, { recursive: true, force: true })));
+});
+
+async function tmp(): Promise<string> {
+  const dir = await mkdtemp(path.join(tmpdir(), "doozctl-app-"));
+  dirs.push(dir);
+  return dir;
+}
 
 function buildDeps(): AppDeps {
+  const git = new GitService();
   return {
-    git: new GitService(),
-    fs: new Storage(process.cwd()),
+    git,
     store: new RepositoryStore(),
-    analyzer: new DefaultAnalyzer(),
+    analyzer: new DefaultAnalyzer(git),
     loader: new DefaultStandardsLoader(),
-    renderer: new DefaultRenderer(),
     validator: new DefaultValidator(),
     mergers: builtinMergers(),
   };
@@ -88,11 +99,12 @@ describe("App", () => {
     }
   });
 
-  it("command methods are scaffolding until implemented", async () => {
+  it("doctor and status are scaffolding until implemented", async () => {
+    const dir = await tmp();
     const app = new App(new Engine(), buildDeps());
-    for (const cmd of ["init", "analyze", "sync", "doctor", "summarize", "status"]) {
+    for (const cmd of ["doctor", "status"]) {
       const method = app[cmd as keyof App].bind(app) as (args: string[]) => Promise<number>;
-      await expect(method([])).rejects.toBeInstanceOf(NotImplementedError);
+      await expect(method([dir])).rejects.toBeInstanceOf(NotImplementedError);
     }
   });
 });

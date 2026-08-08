@@ -15,22 +15,19 @@ import { Engine } from "./engine/engine.js";
 import {
   builtinMergers,
   DefaultAnalyzer,
-  DefaultRenderer,
   DefaultStandardsLoader,
   DefaultValidator,
 } from "./engine/contracts.js";
 import { GitService } from "./infra/git/git.js";
 import { RepositoryStore } from "./store/repository-store.js";
-import { Storage } from "./store/storage.js";
 
 function buildDeps(): AppDeps {
+  const git = new GitService();
   return {
-    git: new GitService(),
-    fs: new Storage(process.cwd()),
+    git,
     store: new RepositoryStore(),
-    analyzer: new DefaultAnalyzer(),
+    analyzer: new DefaultAnalyzer(git),
     loader: new DefaultStandardsLoader(),
-    renderer: new DefaultRenderer(),
     validator: new DefaultValidator(),
     mergers: builtinMergers(),
   };

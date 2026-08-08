@@ -3,7 +3,6 @@ import type {
   AnalyzeDeps,
   LoadDeps,
   MergeDeps,
-  RenderDeps,
   SaveAnalysisDeps,
   ValidateDeps,
   WriteDeps,
@@ -30,13 +29,13 @@ import {
 
 /** The full init pipeline: Analyze → Load → Resolve → Render → Merge → Validate → Write. */
 export function initPipeline(
-  deps: AnalyzeDeps & LoadDeps & RenderDeps & MergeDeps & ValidateDeps & WriteDeps,
+  deps: AnalyzeDeps & LoadDeps & MergeDeps & ValidateDeps & WriteDeps,
 ): PipelineStep[] {
   return [
     analyzeStep(deps),
     loadStep(deps),
     resolveVariablesStep(),
-    renderStep(deps),
+    renderStep(),
     mergeStep(deps),
     validateStep(deps),
     writeStep(deps),
@@ -50,12 +49,12 @@ export function analyzePipeline(deps: AnalyzeDeps & SaveAnalysisDeps): PipelineS
 
 /** Sync: re-render all managed artifacts, preserving developer content. */
 export function syncPipeline(
-  deps: LoadDeps & RenderDeps & MergeDeps & ValidateDeps & WriteDeps,
+  deps: LoadDeps & MergeDeps & ValidateDeps & WriteDeps,
 ): PipelineStep[] {
   return [
     loadStep(deps),
     resolveVariablesStep(),
-    renderStep(deps),
+    renderStep(),
     mergeStep(deps),
     validateStep(deps),
     writeStep(deps),
@@ -68,12 +67,10 @@ export function doctorPipeline(deps: ValidateDeps): PipelineStep[] {
 }
 
 /** Summarize: append an immutable session and update context. */
-export function summarizePipeline(
-  deps: RenderDeps & MergeDeps & ValidateDeps & WriteDeps,
-): PipelineStep[] {
+export function summarizePipeline(deps: MergeDeps & ValidateDeps & WriteDeps): PipelineStep[] {
   return [
     resolveVariablesStep(),
-    renderStep(deps),
+    renderStep(),
     mergeStep(deps),
     validateStep(deps),
     writeStep(deps),

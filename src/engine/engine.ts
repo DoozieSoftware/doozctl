@@ -1,4 +1,10 @@
-import type { Analysis, Artifact, StandardsPackage, Variables } from "../model/model.js";
+import type {
+  Analysis,
+  Artifact,
+  RenderedArtifact,
+  StandardsPackage,
+  Variables,
+} from "../model/model.js";
 
 /**
  * Core Engine: runs the standardized pipeline as a sequence of independent
@@ -28,6 +34,10 @@ export interface ExecutionContext {
   standards: StandardsPackage | null;
   /** In-flight artifacts (filled by load, consumed by render/write). */
   artifacts: Artifact[];
+  /** Rendered artifacts (filled by render, consumed by merge/write). */
+  rendered: RenderedArtifact[];
+  /** Merged artifacts (filled by merge, consumed by write). */
+  merged: RenderedArtifact[];
 }
 
 /** A single pipeline step. */
@@ -49,6 +59,8 @@ export class Engine {
       variables: {},
       standards: null,
       artifacts: [],
+      rendered: [],
+      merged: [],
     };
     for (const step of steps) {
       await step(ctx);

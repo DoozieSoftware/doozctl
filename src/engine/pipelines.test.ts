@@ -12,7 +12,6 @@ import type {
   AnalyzeDeps,
   LoadDeps,
   MergeDeps,
-  RenderDeps,
   SaveAnalysisDeps,
   ValidateDeps,
   WriteDeps,
@@ -22,12 +21,10 @@ const deps = {
   git: {},
   analyzer: {},
   loader: {},
-  renderer: {},
   mergers: {},
   validator: {},
-  fs: {},
   store: {},
-} as AnalyzeDeps & LoadDeps & RenderDeps & MergeDeps & ValidateDeps & WriteDeps & SaveAnalysisDeps;
+} as AnalyzeDeps & LoadDeps & MergeDeps & ValidateDeps & WriteDeps & SaveAnalysisDeps;
 
 describe("command pipelines", () => {
   it("init runs the full seven-stage pipeline", () => {

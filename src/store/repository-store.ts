@@ -1,36 +1,41 @@
 import { NotImplementedError } from "../errors.js";
 import type { Analysis, Manifest, Session } from "../model/model.js";
+import { parseJson, serializeJson } from "./json.js";
+import { Storage } from "./storage.js";
 
 /**
- * Repository Store: owns the engine's generated state under `.ai/`:
+ * Repository Store: owns the engine's generated state under `.dooz/` and `.ai/`:
  *
- *   manifest.json
- *   repository-analysis.json
- *   current-context.md
- *   sessions/
+ *   .dooz/manifest.json
+ *   .ai/repository-analysis.json
+ *   .ai/current-context.md
+ *   .ai/sessions/
  *
- * These files belong to the engine and are regenerated as required.
- * Scaffolding until a later phase implements persistence.
+ * These files belong to the engine and are regenerated as required. Writes are
+ * atomic and deterministic (canonical JSON). Context and session operations are
+ * scaffolding until a later phase implements them.
  */
 export class RepositoryStore {
   /** Load the manifest. */
-  loadManifest(_dir: string): Promise<Manifest> {
-    return Promise.reject(new NotImplementedError("store.manifest"));
+  async loadManifest(dir: string): Promise<Manifest> {
+    const raw = await new Storage(dir).read(".dooz", "manifest.json");
+    return parseJson<Manifest>(raw);
   }
 
   /** Save the manifest. */
-  saveManifest(_dir: string, _manifest: Manifest): Promise<void> {
-    return Promise.reject(new NotImplementedError("store.manifest"));
+  async saveManifest(dir: string, manifest: Manifest): Promise<void> {
+    await new Storage(dir).atomicWrite(serializeJson(manifest), ".dooz", "manifest.json");
   }
 
   /** Load the repository analysis. */
-  loadAnalysis(_dir: string): Promise<Analysis> {
-    return Promise.reject(new NotImplementedError("store.analysis"));
+  async loadAnalysis(dir: string): Promise<Analysis> {
+    const raw = await new Storage(dir).read(".ai", "repository-analysis.json");
+    return parseJson<Analysis>(raw);
   }
 
   /** Save the repository analysis. */
-  saveAnalysis(_dir: string, _analysis: Analysis): Promise<void> {
-    return Promise.reject(new NotImplementedError("store.analysis"));
+  async saveAnalysis(dir: string, analysis: Analysis): Promise<void> {
+    await new Storage(dir).atomicWrite(serializeJson(analysis), ".ai", "repository-analysis.json");
   }
 
   /** Read the current context. */
