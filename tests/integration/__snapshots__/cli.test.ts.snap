@@ -10,17 +10,18 @@ Options:
   -h, --help           display help for command
 
 Commands:
-  analyze [args...]
-  doctor [args...]
-  init [args...]
-  status [args...]
-  summarize [args...]
-  sync [args...]
+  analyze [args...]    Update the repository analysis. Read-only.
+  doctor [args...]     Validate the repository and report problems. Read-only.
+  init [args...]       Initialize a repository with AI repository standards.
+  status [args...]     Display repository status. Read-only.
+  summarize [args...]  Append a session summary and update the current context.
+  sync [args...]       Re-render managed artifacts, preserving developer
+                       content.
   help [command]       display help for command
 "
 `;
 
 exports[`doozctl CLI (integration) > renders a deterministic version snapshot 1`] = `
-"0.1.0-alpha.1
+"0.3.0-alpha.1
 "
 `;

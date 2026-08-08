@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Writable } from "node:stream";
 import { Dispatcher, ExitCode } from "../dispatcher/dispatcher.js";
-import { buildProgram, runCli, VERSION } from "./cli.js";
+import { buildProgram, humanizeError, runCli, VERSION } from "./cli.js";
 
 function capture(): { stdout: Writable; stderr: Writable; out: () => string; err: () => string } {
   let outBuf = "";
@@ -41,6 +41,24 @@ describe("buildProgram", () => {
     expect(() => buildProgram(d, streams.stdout, streams.stderr).help()).toThrow();
     expect(streams.out()).toContain("ok [args...]");
     expect(streams.out()).toContain("fail [args...]");
+  });
+});
+
+describe("humanizeError", () => {
+  it("rewrites a missing-standards-package error with guidance", () => {
+    const message = humanizeError(new Error("standards package not found: /tmp/nope/package.json"));
+    expect(message).toContain("Standards package not found at /tmp/nope/package.json");
+    expect(message).toContain("Pass a directory that contains a standards package");
+  });
+
+  it("rewrites an unmanaged-file merge error with guidance", () => {
+    const message = humanizeError(new Error("merge: existing file has no managed block markers"));
+    expect(message).toContain("was left untouched");
+    expect(message).toContain("Convert that file to a managed-blocks artifact");
+  });
+
+  it("passes through unknown errors unchanged", () => {
+    expect(humanizeError(new Error("kaboom"))).toBe("kaboom");
   });
 });
 

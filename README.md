@@ -59,6 +59,33 @@ The engine renders whatever the package declares. All domain-specific behavior l
 
 Portable repository memory. Cursor, Claude, Codex, Gemini, OpenCode, and future tools consume the same memory. The repository becomes the long-term memory; AI coding assistants become interchangeable execution engines.
 
+## Quick start
+
+Pre-release (v0.3.0-alpha.1). DoozCTL takes two arguments: a repository to initialize and a Standards Package directory.
+
+```sh
+doozctl init <repo> <package>
+```
+
+Example — initialize the current directory against a local standards package:
+
+```sh
+doozctl init . ./standards
+```
+
+On success, `init` analyzes the repository, renders each artifact the package declares (for example `AGENTS.md`), merges it into existing files without touching unmanaged content, and writes the engine state:
+
+```text
+Repository initialized: .
+Generated artifacts:
+  - AGENTS.md
+
+Engine state:      .dooz/manifest.json
+Repository memory: .ai/repository-analysis.json
+```
+
+A Standards Package is just a directory containing a `package.json` manifest that declares artifacts. See [spec.md](spec.md) for the contract.
+
 ## Design
 
 - Minimal. Deterministic. Offline. Text-based. Vendor neutral. Artifact driven.
@@ -76,7 +103,7 @@ Core engine complete (v0.3.0-alpha.1). Orchestration in progress:
 - ✅ Standards Loader
 - ✅ Renderer
 - ✅ Merge Engine
-- ⏳ init
+- ✅ init
 - ⏳ sync
 - ⏳ summarize
 - ⏳ doctor

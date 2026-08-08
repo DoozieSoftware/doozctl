@@ -30,7 +30,7 @@ async function tmp(prefix: string): Promise<string> {
   return dir;
 }
 
-function buildDeps(): AppDeps {
+function buildDeps(print: (message: string) => void = () => {}): AppDeps {
   const git = new GitService();
   return {
     git,
@@ -39,6 +39,7 @@ function buildDeps(): AppDeps {
     loader: new DefaultStandardsLoader(),
     validator: new DefaultValidator(),
     mergers: builtinMergers(),
+    print,
   };
 }
 
@@ -95,7 +96,17 @@ describe("doozctl init (integration)", () => {
     await writeRepo(repo);
     await writePackage(pkg);
 
-    await expect(app().init([repo, pkg])).resolves.toBe(0);
+    let printed = "";
+    const run = new App(
+      new Engine(),
+      buildDeps((message) => (printed += message + "\n")),
+    );
+    await expect(run.init([repo, pkg])).resolves.toBe(0);
+
+    expect(printed).toContain("Repository initialized:");
+    expect(printed).toContain("- AGENTS.md");
+    expect(printed).toContain(".dooz/manifest.json");
+    expect(printed).toContain(".ai/repository-analysis.json");
 
     await expect(readFile(path.join(repo, "AGENTS.md"), "utf-8")).resolves.toContain(
       "Lang: TypeScript",

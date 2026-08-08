@@ -25,15 +25,20 @@ async function tmp(): Promise<string> {
   return dir;
 }
 
-function buildDeps(): AppDeps {
+function buildDeps(): { deps: AppDeps; printed: string[] } {
   const git = new GitService();
+  const printed: string[] = [];
   return {
-    git,
-    store: new RepositoryStore(),
-    analyzer: new DefaultAnalyzer(git),
-    loader: new DefaultStandardsLoader(),
-    validator: new DefaultValidator(),
-    mergers: builtinMergers(),
+    printed,
+    deps: {
+      git,
+      store: new RepositoryStore(),
+      analyzer: new DefaultAnalyzer(git),
+      loader: new DefaultStandardsLoader(),
+      validator: new DefaultValidator(),
+      mergers: builtinMergers(),
+      print: (message) => printed.push(message),
+    },
   };
 }
 
@@ -49,10 +54,11 @@ function spyEngine() {
 }
 
 describe("App", () => {
-  it("routes init through the full seven-stage pipeline", async () => {
+  it("routes init through the full seven-stage pipeline and prints a report", async () => {
     const { engine, calls } = spyEngine();
-    const app = new App(engine, buildDeps());
-    const code = await app.init(["/tmp/repo"]);
+    const { deps, printed } = buildDeps();
+    const app = new App(engine, deps);
+    const code = await app.init(["/tmp/repo", "/tmp/pkg"]);
     expect(code).toBe(0);
     expect(calls).toHaveLength(1);
     expect(calls[0]?.root).toBe("/tmp/repo");
@@ -65,11 +71,24 @@ describe("App", () => {
       "validateStep",
       "writeStep",
     ]);
+    expect(printed).toHaveLength(1);
+    expect(printed[0]).toContain("Repository initialized: /tmp/repo");
+    expect(printed[0]).toContain(".dooz/manifest.json");
+    expect(printed[0]).toContain(".ai/repository-analysis.json");
+  });
+
+  it("fails fast before running any step when init is missing arguments", async () => {
+    const { engine, calls } = spyEngine();
+    const app = new App(engine, buildDeps().deps);
+
+    await expect(app.init([])).rejects.toThrow(/Usage:\s+doozctl init <repo> <package>/);
+    await expect(app.init(["/tmp/repo"])).rejects.toThrow(/Usage:\s+doozctl init <repo> <package>/);
+    expect(calls).toHaveLength(0);
   });
 
   it("routes each command to its own pipeline", async () => {
     const { engine, calls } = spyEngine();
-    const app = new App(engine, buildDeps());
+    const app = new App(engine, buildDeps().deps);
 
     const commands: Array<keyof App> = ["analyze", "sync", "doctor", "summarize", "status"];
     for (const cmd of commands) {
@@ -88,7 +107,7 @@ describe("App", () => {
 
   it("never sends a write step to read-only commands", async () => {
     const { engine, calls } = spyEngine();
-    const app = new App(engine, buildDeps());
+    const app = new App(engine, buildDeps().deps);
 
     for (const cmd of ["analyze", "doctor", "status"]) {
       await (app[cmd as keyof App] as (args: string[]) => Promise<number>)([]);
@@ -101,7 +120,7 @@ describe("App", () => {
 
   it("doctor and status are scaffolding until implemented", async () => {
     const dir = await tmp();
-    const app = new App(new Engine(), buildDeps());
+    const app = new App(new Engine(), buildDeps().deps);
     for (const cmd of ["doctor", "status"]) {
       const method = app[cmd as keyof App].bind(app) as (args: string[]) => Promise<number>;
       await expect(method([dir])).rejects.toBeInstanceOf(NotImplementedError);

@@ -9,7 +9,7 @@
  */
 import { CommanderError } from "commander";
 import { App, type AppDeps } from "./app/app.js";
-import { buildProgram, ExitCodeError } from "./cli/cli.js";
+import { buildProgram, ExitCodeError, humanizeError } from "./cli/cli.js";
 import { Dispatcher, ExitCode } from "./dispatcher/dispatcher.js";
 import { Engine } from "./engine/engine.js";
 import {
@@ -30,6 +30,7 @@ function buildDeps(): AppDeps {
     loader: new DefaultStandardsLoader(),
     validator: new DefaultValidator(),
     mergers: builtinMergers(),
+    print: (message) => process.stdout.write(message + "\n"),
   };
 }
 
@@ -68,6 +69,6 @@ main()
     process.exitCode = code;
   })
   .catch((err) => {
-    console.error(`doozctl: ${err instanceof Error ? err.message : String(err)}`);
+    console.error(`doozctl: ${humanizeError(err)}`);
     process.exitCode = ExitCode.Error;
   });

@@ -11,7 +11,7 @@ import { Dispatcher, ExitCode } from "../dispatcher/dispatcher.js";
  */
 
 /** Program metadata, overridable at build time. */
-export const VERSION = "0.1.0-alpha.1";
+export const VERSION = "0.3.0-alpha.1";
 
 /** Internal signal carrying a non-zero exit code out of a commander action. */
 export class ExitCodeError extends Error {
@@ -19,6 +19,79 @@ export class ExitCodeError extends Error {
     super(`command exited with code ${exitCode}`);
     this.name = "ExitCodeError";
   }
+}
+
+/** Per-command help surfaced in the CLI. */
+interface CommandHelp {
+  description: string;
+  argumentDescription: string;
+  usage: string;
+  example: string;
+}
+
+/** Help text for the built-in commands, keyed by command name. */
+const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
+  init: {
+    description: "Initialize a repository with AI repository standards.",
+    argumentDescription: "the repository path, then the Standards Package directory",
+    usage: "doozctl init <repo> <package>",
+    example: "doozctl init . ./standards",
+  },
+  analyze: {
+    description: "Update the repository analysis. Read-only.",
+    argumentDescription: "the repository path",
+    usage: "doozctl analyze [repo]",
+    example: "doozctl analyze .",
+  },
+  sync: {
+    description: "Re-render managed artifacts, preserving developer content.",
+    argumentDescription: "the repository path, then the Standards Package directory",
+    usage: "doozctl sync <repo> <package>",
+    example: "doozctl sync . ./standards",
+  },
+  doctor: {
+    description: "Validate the repository and report problems. Read-only.",
+    argumentDescription: "the repository path",
+    usage: "doozctl doctor [repo]",
+    example: "doozctl doctor .",
+  },
+  summarize: {
+    description: "Append a session summary and update the current context.",
+    argumentDescription: "the repository path",
+    usage: "doozctl summarize [repo]",
+    example: "doozctl summarize .",
+  },
+  status: {
+    description: "Display repository status. Read-only.",
+    argumentDescription: "the repository path",
+    usage: "doozctl status [repo]",
+    example: "doozctl status .",
+  },
+};
+
+/**
+ * Rewrite engine errors into user-facing guidance at the CLI boundary. The
+ * engine keeps its precise messages; the CLI owns how they read to a human.
+ */
+export function humanizeError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (message.startsWith("standards package not found:")) {
+    const at = message.slice("standards package not found:".length).trim();
+    return [
+      `Standards package not found at ${at}.`,
+      "Pass a directory that contains a standards package (a package.json manifest).",
+    ].join("\n");
+  }
+
+  if (message.includes("no managed block markers")) {
+    return [
+      "A destination file already exists but is not engine-managed, so it was left untouched.",
+      "Convert that file to a managed-blocks artifact (or remove it) and run init again.",
+    ].join("\n");
+  }
+
+  return message;
 }
 
 /** Build the commander program, wiring each command to the dispatcher. */
@@ -36,16 +109,22 @@ export function buildProgram(
     .configureOutput({ writeOut: (s) => stdout.write(s), writeErr: (s) => stderr.write(s) });
 
   for (const name of dispatcher.commands()) {
-    program
-      .command(name)
-      .argument("[args...]")
-      .allowExcessArguments(true)
-      .action(async (args: string[]) => {
-        const code = await dispatcher.dispatch(name, args);
-        if (code !== ExitCode.OK) {
-          throw new ExitCodeError(code);
-        }
-      });
+    const command = program.command(name);
+    const help = COMMAND_HELP[name];
+    if (help !== undefined) {
+      command
+        .description(help.description)
+        .argument("[args...]", help.argumentDescription)
+        .addHelpText("after", `\nUsage: ${help.usage}\n\nExample: ${help.example}\n`);
+    } else {
+      command.argument("[args...]");
+    }
+    command.allowExcessArguments(true).action(async (args: string[]) => {
+      const code = await dispatcher.dispatch(name, args);
+      if (code !== ExitCode.OK) {
+        throw new ExitCodeError(code);
+      }
+    });
   }
 
   return program;
@@ -79,7 +158,7 @@ export async function runCli(
       // help/version display and unknown-command errors carry their own code.
       return err.exitCode ?? ExitCode.Error;
     }
-    stderr.write(`doozctl: ${err instanceof Error ? err.message : String(err)}\n`);
+    stderr.write(`doozctl: ${humanizeError(err)}\n`);
     return ExitCode.Error;
   }
 }
