@@ -88,6 +88,8 @@ Repository memory: .ai/repository-analysis.json
 
 A Standards Package is just a directory containing a `package.json` manifest that declares artifacts. See [spec.md](spec.md) for the contract. Ready-to-run packages live in [examples/](examples/README.md).
 
+See [FAQ.md](FAQ.md) for common questions.
+
 ## Commands
 
 ```sh
