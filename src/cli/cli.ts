@@ -56,10 +56,11 @@ const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     example: "doozctl doctor .",
   },
   summarize: {
-    description: "Append a session summary and update the current context.",
-    argumentDescription: "the repository path",
-    usage: "doozctl summarize [repo]",
-    example: "doozctl summarize .",
+    description: "Append an immutable session summary and update the current context.",
+    argumentDescription: "the repository path, the Standards Package directory, and a session file",
+    usage:
+      "doozctl summarize <repo> <package> <session-file> [--tool <tool>] [--model <model>] [--user <user>]",
+    example: "doozctl summarize . ./standards .ai/pending.md --tool claude --model opus",
   },
   status: {
     description: "Display repository status. Read-only.",
@@ -98,6 +99,14 @@ export function humanizeError(error: unknown): string {
     ].join("\n");
   }
 
+  if (message.startsWith("session file not found:")) {
+    const at = message.slice("session file not found:".length).trim();
+    return [
+      `Session file not found at ${at}.`,
+      "Pass the path to a file containing the AI-authored session summary.",
+    ].join("\n");
+  }
+
   return message;
 }
 
@@ -122,9 +131,10 @@ export function buildProgram(
       command
         .description(help.description)
         .argument("[args...]", help.argumentDescription)
+        .allowUnknownOption(true)
         .addHelpText("after", `\nUsage: ${help.usage}\n\nExample: ${help.example}\n`);
     } else {
-      command.argument("[args...]");
+      command.argument("[args...]").allowUnknownOption(true);
     }
     command.allowExcessArguments(true).action(async (args: string[]) => {
       const code = await dispatcher.dispatch(name, args);

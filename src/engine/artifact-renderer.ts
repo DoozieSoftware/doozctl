@@ -26,7 +26,7 @@ export function renderTemplate(template: string, variables: Variables): string {
 }
 
 /** Resolve a dotted path against the variables, or undefined when missing. */
-function resolvePath(variables: unknown, path: string): unknown {
+export function resolvePath(variables: unknown, path: string): unknown {
   let current: unknown = variables;
   for (const part of path.split(".")) {
     if (current === null || typeof current !== "object" || Array.isArray(current)) {

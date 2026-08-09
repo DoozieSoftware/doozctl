@@ -1,12 +1,20 @@
 import { NotImplementedError } from "../errors.js";
 import type { GitService } from "../infra/git/git.js";
-import type { Manifest, RenderedArtifact, Workflow } from "../model/model.js";
+import { createArtifact } from "../model/artifact.js";
+import type { Manifest, RenderedArtifact, SessionInput, Workflow } from "../model/model.js";
 import type { MergeStrategy } from "../model/model.js";
 import type { RepositoryStore } from "../store/repository-store.js";
 import { Storage } from "../store/storage.js";
 import { ArtifactRenderer } from "./artifact-renderer.js";
 import type { Analyzer, StandardsLoader, StrategyMerger, Validator } from "./contracts.js";
 import type { ExecutionContext, PipelineStep } from "./engine.js";
+import {
+  capField,
+  extractPreviousContext,
+  parseSessionSections,
+  resolveContextFields,
+  resolveDestinationTemplate,
+} from "./session.js";
 import { resolveVariables } from "./variable-resolver.js";
 
 /**
@@ -81,6 +89,88 @@ export function loadStep(deps: LoadDeps): PipelineStep {
 export function lifecycleStep(workflow: Workflow): PipelineStep {
   return named("lifecycle", async (ctx) => {
     ctx.artifacts = ctx.artifacts.filter((artifact) => artifact.lifecycle.includes(workflow));
+  });
+}
+
+/** Dependencies for the session step. */
+export interface SessionDeps {
+  git: GitService;
+}
+
+/**
+ * Session: build the render variables for the summarize command. Parses the
+ * AI-authored session content into sections, applies carry-forward from the
+ * previous current context (Objective and Open Questions the session did not
+ * change), records git facts, and refuses to overwrite an existing immutable
+ * session file (a same-second collision).
+ */
+export function sessionStep(deps: SessionDeps, input: SessionInput): PipelineStep {
+  return named("session", async (ctx) => {
+    const repo = new Storage(ctx.root);
+    const sections = parseSessionSections(input.content);
+    const previousRaw = await readOrNull(repo, ".ai/current-context.md");
+    const previous = extractPreviousContext(previousRaw ?? "");
+    const fields = resolveContextFields(sections, previous);
+    const commit = (await deps.git.commitHash(ctx.root)) ?? "";
+    const branch = ctx.analysis?.git.branch ?? "";
+
+    ctx.variables = {
+      ...ctx.variables,
+      session: {
+        id: input.id,
+        date: input.date,
+        tool: input.tool,
+        model: input.model,
+        user: input.user,
+        commit,
+        branch,
+        content: input.content,
+        objective: capField(fields.objective),
+        summary: capField(fields.summary),
+        decisions: capField(fields.decisions),
+        filesChanged: capField(fields.filesChanged),
+        nextSteps: capField(fields.nextSteps),
+        openQuestions: capField(fields.openQuestions),
+      },
+    };
+
+    const sessionArtifact = ctx.artifacts.find((artifact) => artifact.mergeStrategy === "append");
+    if (sessionArtifact !== undefined) {
+      const dest = resolveDestinationTemplate(sessionArtifact.destination.path, ctx.variables);
+      if (await repo.exists(dest)) {
+        throw new Error(
+          `session file already exists and is immutable: ${dest}. Wait one second and run summarize again.`,
+        );
+      }
+    }
+  });
+}
+
+/**
+ * Resolve `{{variable}}` references in artifact destinations against the render
+ * variables. Sessions declare their destination as
+ * `.ai/sessions/{{session.id}}.md`; this step materializes it to a concrete
+ * path before rendering and writing. Artifacts without references are returned
+ * unchanged.
+ */
+export function resolveDestinationStep(): PipelineStep {
+  return named("resolveDestination", async (ctx) => {
+    ctx.artifacts = ctx.artifacts.map((artifact) => {
+      const path = resolveDestinationTemplate(artifact.destination.path, ctx.variables);
+      if (path === artifact.destination.path) {
+        return artifact;
+      }
+      return createArtifact({
+        id: artifact.id,
+        source: artifact.source,
+        destination: { path },
+        mergeStrategy: artifact.mergeStrategy,
+        lifecycle: artifact.lifecycle,
+        variables: artifact.variables,
+        metadata: artifact.metadata,
+        ...(artifact.schema !== undefined ? { schema: artifact.schema } : {}),
+      });
+    });
   });
 }
 

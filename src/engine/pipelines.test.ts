@@ -61,10 +61,19 @@ describe("command pipelines", () => {
   });
 
   it("summarize appends a session and filters to the summarize lifecycle", () => {
-    const steps = summarizePipeline(deps);
+    const steps = summarizePipeline(deps, {
+      id: "2026-08-09_093000",
+      date: "2026-08-09T09:30:00+08:00",
+      content: "",
+      tool: "",
+      model: "",
+      user: "",
+    });
     expect(steps.map(fnOf)).toContain("writeStep");
     expect(steps.map(fnOf)).toContain("mergeStep");
     expect(steps.map(fnOf)).toContain("lifecycleStep");
+    expect(steps.map(fnOf)).toContain("loadStateStep");
+    expect(steps.map(fnOf)).not.toContain("analyzeStep");
   });
 });
 

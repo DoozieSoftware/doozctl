@@ -14,7 +14,8 @@ Commands:
   doctor [args...]     Validate the repository and report problems. Read-only.
   init [args...]       Initialize a repository with AI repository standards.
   status [args...]     Display repository status. Read-only.
-  summarize [args...]  Append a session summary and update the current context.
+  summarize [args...]  Append an immutable session summary and update the
+                       current context.
   sync [args...]       Re-render managed artifacts, preserving developer
                        content.
   help [command]       display help for command

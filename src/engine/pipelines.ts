@@ -1,10 +1,12 @@
 import type { PipelineStep } from "./engine.js";
+import type { SessionInput } from "../model/model.js";
 import type {
   AnalyzeDeps,
   LoadDeps,
   LoadStateDeps,
   MergeDeps,
   SaveAnalysisDeps,
+  SessionDeps,
   ValidateDeps,
   WriteDeps,
 } from "./steps.js";
@@ -16,8 +18,10 @@ import {
   mergeStep,
   renderStep,
   reportStep,
+  resolveDestinationStep,
   resolveVariablesStep,
   saveAnalysisStep,
+  sessionStep,
   validateStep,
   writeStep,
 } from "./steps.js";
@@ -78,14 +82,23 @@ export function doctorPipeline(deps: ValidateDeps): PipelineStep[] {
   return [validateStep(deps), reportStep()];
 }
 
-/** Summarize: load the package, keep summarize-lifecycle artifacts, append an immutable session and update context. */
+/**
+ * Summarize: verify initialization, keep summarize-lifecycle artifacts, build
+ * the session variables, append the immutable session file, and rewrite the
+ * current context. Never re-analyzes: it loads the persisted repository state
+ * and repository analysis.
+ */
 export function summarizePipeline(
-  deps: LoadDeps & MergeDeps & ValidateDeps & WriteDeps,
+  deps: LoadStateDeps & LoadDeps & MergeDeps & ValidateDeps & WriteDeps & SessionDeps,
+  input: SessionInput,
 ): PipelineStep[] {
   return [
+    loadRepositoryStateStep(deps),
     loadStep(deps),
     lifecycleStep("summarize"),
     resolveVariablesStep(),
+    sessionStep(deps, input),
+    resolveDestinationStep(),
     renderStep(),
     mergeStep(deps),
     validateStep(deps),

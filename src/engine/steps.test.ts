@@ -18,8 +18,10 @@ import {
   mergeStep,
   renderStep,
   reportStep,
+  resolveDestinationStep,
   resolveVariablesStep,
   saveAnalysisStep,
+  sessionStep,
   validateStep,
   writeStep,
 } from "./steps.js";
@@ -377,6 +379,136 @@ describe("pipeline steps", () => {
       await readFile(path.join(repo, ".dooz", "manifest.json"), "utf-8"),
     ) as { artifacts: string[] };
     expect(manifest.artifacts).toEqual(["gitignore", "agents"]);
+  });
+
+  it("session step parses content, carries forward context and records git facts", async () => {
+    const repo = await tmp();
+    await mkdir(path.join(repo, ".ai"), { recursive: true });
+    await writeFile(
+      path.join(repo, ".ai", "current-context.md"),
+      "# Current Objective\nOld goal.\n\n# Open Questions\nWho owns it?\n",
+      "utf-8",
+    );
+    const sessionArtifact = createArtifact({
+      id: "session",
+      source: { path: "templates/session.md" },
+      destination: { path: ".ai/sessions/{{session.id}}.md" },
+      mergeStrategy: "append",
+      lifecycle: ["summarize"],
+    });
+    const ctx = await runSteps(
+      [
+        async (c) => {
+          c.artifacts = [sessionArtifact];
+          c.analysis = minimalAnalysis(repo);
+        },
+        sessionStep(
+          {
+            git: {
+              commitHash: async () => "abc123",
+            } as never,
+          },
+          {
+            id: "2026-08-09_093000",
+            date: "2026-08-09T09:30:00+08:00",
+            content: "## Summary\nBuilt the widget.\n",
+            tool: "claude",
+            model: "opus",
+            user: "akshay",
+          },
+        ),
+      ],
+      { root: repo },
+    );
+    expect(ctx.variables.session).toMatchObject({
+      id: "2026-08-09_093000",
+      date: "2026-08-09T09:30:00+08:00",
+      tool: "claude",
+      model: "opus",
+      user: "akshay",
+      commit: "abc123",
+      objective: "Old goal.",
+      summary: "Built the widget.",
+      openQuestions: "Who owns it?",
+    });
+  });
+
+  it("session step refuses to overwrite an existing immutable session file", async () => {
+    const repo = await tmp();
+    await mkdir(path.join(repo, ".ai", "sessions"), { recursive: true });
+    await writeFile(
+      path.join(repo, ".ai", "sessions", "2026-08-09_093000.md"),
+      "existing",
+      "utf-8",
+    );
+    const sessionArtifact = createArtifact({
+      id: "session",
+      source: { path: "templates/session.md" },
+      destination: { path: ".ai/sessions/{{session.id}}.md" },
+      mergeStrategy: "append",
+      lifecycle: ["summarize"],
+    });
+    await expect(
+      runSteps(
+        [
+          async (c) => {
+            c.artifacts = [sessionArtifact];
+          },
+          sessionStep(
+            {
+              git: {
+                commitHash: async () => null,
+              } as never,
+            },
+            {
+              id: "2026-08-09_093000",
+              date: "2026-08-09T09:30:00+08:00",
+              content: "## Summary\nx\n",
+              tool: "",
+              model: "",
+              user: "",
+            },
+          ),
+        ],
+        { root: repo },
+      ),
+    ).rejects.toThrow(/session file already exists and is immutable/);
+  });
+
+  it("resolveDestination step materializes session destinations", async () => {
+    const sessionArtifact = createArtifact({
+      id: "session",
+      source: { path: "templates/session.md" },
+      destination: { path: ".ai/sessions/{{session.id}}.md" },
+      mergeStrategy: "append",
+      lifecycle: ["summarize"],
+    });
+    const ctx = await runSteps([
+      async (c) => {
+        c.artifacts = [sessionArtifact];
+        c.variables = { session: { id: "2026-08-09_093000" } };
+      },
+      resolveDestinationStep(),
+    ]);
+    expect(ctx.artifacts[0]?.destination.path).toBe(".ai/sessions/2026-08-09_093000.md");
+  });
+
+  it("resolveDestination step leaves destinations without references unchanged", async () => {
+    const artifact = createArtifact({
+      id: "agents",
+      source: { path: "a.md" },
+      destination: { path: "AGENTS.md" },
+      mergeStrategy: "managed-blocks",
+      lifecycle: ["init", "sync"],
+    });
+    const ctx = await runSteps([
+      async (c) => {
+        c.artifacts = [artifact];
+        c.variables = {};
+      },
+      resolveDestinationStep(),
+    ]);
+    expect(ctx.artifacts[0]).toBe(artifact);
   });
 
   it("saveAnalysis step persists the analysis", async () => {

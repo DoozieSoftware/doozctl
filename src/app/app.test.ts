@@ -74,6 +74,7 @@ function buildDeps(): { deps: AppDeps; printed: string[] } {
       validator: new DefaultValidator(),
       mergers: builtinMergers(),
       print: (message) => printed.push(message),
+      now: () => new Date(2026, 7, 9, 9, 30, 0),
     },
   };
 }
@@ -127,15 +128,16 @@ describe("App", () => {
     const { engine, calls } = spyEngine();
     const app = new App(engine, buildDeps().deps);
 
-    for (const cmd of ["analyze", "doctor", "summarize", "status"]) {
-      await (app[cmd as keyof App] as (args: string[]) => Promise<number>)([]);
-    }
-
-    // sync needs a loadable Standards Package so the app can snapshot
-    // destinations; the spy engine records the pipeline without executing it.
     const repo = await tmp();
     const pkg = await tmp();
     await writePackage(pkg);
+    const sessionFile = path.join(repo, "session.md");
+    await writeFile(sessionFile, "## Summary\ndone\n", "utf-8");
+
+    await (app.analyze as (args: string[]) => Promise<number>)([repo]);
+    await (app.doctor as (args: string[]) => Promise<number>)([repo]);
+    await app.summarize([repo, pkg, sessionFile]);
+    await (app.status as (args: string[]) => Promise<number>)([repo]);
     await app.sync([repo, pkg]);
 
     const executed = calls.map((c) => c.steps);
@@ -143,9 +145,12 @@ describe("App", () => {
       ["analyzeStep", "saveAnalysisStep"],
       ["validateStep", "reportStep"],
       [
+        "loadStateStep",
         "loadStep",
         "lifecycleStep",
         "resolveVariablesStep",
+        "sessionStep",
+        "resolveDestinationStep",
         "renderStep",
         "mergeStep",
         "validateStep",
@@ -163,6 +168,35 @@ describe("App", () => {
         "writeStep",
       ],
     ]);
+  });
+
+  it("fails fast when summarize is missing arguments", async () => {
+    const { engine, calls } = spyEngine();
+    const app = new App(engine, buildDeps().deps);
+
+    await expect(app.summarize([])).rejects.toThrow(/Usage:\s+doozctl summarize <repo> <package>/);
+    await expect(app.summarize(["/tmp/repo", "/tmp/pkg"])).rejects.toThrow(
+      /Usage:\s+doozctl summarize <repo> <package>/,
+    );
+    expect(calls).toHaveLength(0);
+  });
+
+  it("rejects a missing session file", async () => {
+    const { engine } = spyEngine();
+    const app = new App(engine, buildDeps().deps);
+
+    await expect(app.summarize(["/tmp/repo", "/tmp/pkg", "/tmp/missing.md"])).rejects.toThrow(
+      /session file not found/,
+    );
+  });
+
+  it("rejects a session flag without a value", async () => {
+    const { engine } = spyEngine();
+    const app = new App(engine, buildDeps().deps);
+
+    await expect(app.summarize(["/tmp/repo", "/tmp/pkg", "/tmp/s.md", "--tool"])).rejects.toThrow(
+      /--tool requires a value/,
+    );
   });
 
   it("fails fast when sync is missing arguments", async () => {

@@ -97,6 +97,25 @@ export interface Session {
   summary: string;
 }
 
+/**
+ * Input for creating a session during summarize. The id and date are derived
+ * from the clock by the app layer; content is the AI-authored session summary.
+ */
+export interface SessionInput {
+  /** Session file id, `YYYY-MM-DD_HHMMSS`. */
+  id: string;
+  /** Local ISO timestamp with offset, recorded in the session front-matter. */
+  date: string;
+  /** The AI-authored session summary content. */
+  content: string;
+  /** Tool that produced the session, or "". */
+  tool: string;
+  /** Model that produced the session, or "". */
+  model: string;
+  /** User who ran the session, or "". */
+  user: string;
+}
+
 /** A loaded extension. */
 export interface Plugin {
   name: string;

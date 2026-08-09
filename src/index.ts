@@ -31,6 +31,7 @@ function buildDeps(): AppDeps {
     validator: new DefaultValidator(),
     mergers: builtinMergers(),
     print: (message) => process.stdout.write(message + "\n"),
+    now: () => new Date(),
   };
 }
 

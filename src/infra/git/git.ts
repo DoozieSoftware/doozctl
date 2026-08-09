@@ -34,6 +34,11 @@ export class GitService {
     return { root, branch, dirty: status !== null && status.length > 0 };
   }
 
+  /** Short commit hash of HEAD, or null when not in a repository. */
+  async commitHash(dir: string): Promise<string | null> {
+    return this.git(dir, ["rev-parse", "--short", "HEAD"]);
+  }
+
   /** Run a read-only git command, returning trimmed stdout or null on error. */
   private async git(cwd: string, args: string[]): Promise<string | null> {
     try {

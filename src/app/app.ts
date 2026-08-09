@@ -16,7 +16,10 @@ import {
   summarizePipeline,
   syncPipeline,
 } from "../engine/pipelines.js";
+import { formatSessionId, toLocalIso } from "../engine/session.js";
+import type { SessionInput } from "../model/model.js";
 import { Storage } from "../store/storage.js";
+import { readFile } from "node:fs/promises";
 
 /**
  * Application Services layer: exposes the use cases the CLI commands map to.
@@ -31,6 +34,8 @@ export interface AppDeps
   extends AnalyzeDeps, LoadDeps, MergeDeps, ValidateDeps, WriteDeps, SaveAnalysisDeps {
   /** Print a line of user-facing output (e.g. the init success report). */
   print: (message: string) => void;
+  /** Clock used to derive session ids and timestamps. */
+  now: () => Date;
 }
 
 /** Composition root of the application. */
@@ -117,9 +122,61 @@ export class App {
     return this.run(doctorPipeline(this.deps), args);
   }
 
-  /** summarize: append a session summary and update context. */
+  /**
+   * summarize: append an immutable session summary and rewrite the current
+   * context. The session summary is read from a file; tool, model and user are
+   * optional flags; id, date, commit and branch are derived automatically.
+   */
   async summarize(args: string[]): Promise<number> {
-    return this.run(summarizePipeline(this.deps), args);
+    const parsed = parseSummarizeArgs(args);
+    if (parsed.positionals.length < 3) {
+      throw new Error(SUMMARIZE_USAGE);
+    }
+    const root = parsed.positionals[0] as string;
+    const standardsDir = parsed.positionals[1] as string;
+    const sessionFile = parsed.positionals[2] as string;
+
+    let content: string;
+    try {
+      content = await readFile(sessionFile, "utf-8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        throw new Error(`session file not found: ${sessionFile}`);
+      }
+      throw error;
+    }
+
+    const now = this.deps.now();
+    const input: SessionInput = {
+      id: formatSessionId(now),
+      date: toLocalIso(now),
+      content,
+      tool: parsed.flags.tool ?? "",
+      model: parsed.flags.model ?? "",
+      user: parsed.flags.user ?? "",
+    };
+
+    const pkg = await this.deps.loader.load(standardsDir);
+    const summarizeArtifacts = pkg.artifacts.filter((artifact) =>
+      artifact.lifecycle.includes("summarize"),
+    );
+    const hasSession = summarizeArtifacts.some((artifact) => artifact.mergeStrategy === "append");
+    const hasContext = summarizeArtifacts.some(
+      (artifact) => artifact.mergeStrategy === "overwrite",
+    );
+
+    this.deps.print("Summarizing repository...");
+    this.deps.print("");
+    await this.run(summarizePipeline(this.deps, input), [root, standardsDir]);
+    if (hasSession) {
+      this.deps.print(`✓ Appended session .ai/sessions/${input.id}.md`);
+    }
+    if (hasContext) {
+      this.deps.print("✓ Updated current context");
+    }
+    this.deps.print("");
+    this.deps.print("Done.");
+    return 0;
   }
 
   /** status: report repository status. Read-only. */
@@ -197,3 +254,39 @@ const SYNC_USAGE = [
   "Usage:   doozctl sync <repo> <package>",
   "Example: doozctl sync . ./standards",
 ].join("\n");
+
+/** User-facing usage for summarize, shown when arguments are missing. */
+const SUMMARIZE_USAGE = [
+  "summarize requires a repository path, a Standards Package directory, and a session file.",
+  "",
+  "Usage:   doozctl summarize <repo> <package> <session-file> [--tool <tool>] [--model <model>] [--user <user>]",
+  "Example: doozctl summarize . ./standards .ai/pending.md --tool claude --model opus --user akshay",
+].join("\n");
+
+/** The session metadata flags summarize accepts. */
+type SessionFlag = "tool" | "model" | "user";
+
+/** Split summarize args into positional arguments and session metadata flags. */
+function parseSummarizeArgs(args: string[]): {
+  positionals: string[];
+  flags: Partial<Record<SessionFlag, string>>;
+} {
+  const positionals: string[] = [];
+  const flags: Partial<Record<SessionFlag, string>> = {};
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i] as string;
+    const match = /^--(tool|model|user)$/.exec(arg);
+    if (match !== null) {
+      const name = match[1] as SessionFlag;
+      const value = args[i + 1];
+      if (value === undefined || value.startsWith("--")) {
+        throw new Error(`--${name} requires a value`);
+      }
+      flags[name] = value;
+      i += 1;
+    } else {
+      positionals.push(arg);
+    }
+  }
+  return { positionals, flags };
+}

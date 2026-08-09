@@ -40,6 +40,7 @@ function buildDeps(print: (message: string) => void = () => {}): AppDeps {
     validator: new DefaultValidator(),
     mergers: builtinMergers(),
     print,
+    now: () => new Date(2026, 7, 9, 9, 30, 0),
   };
 }
 
