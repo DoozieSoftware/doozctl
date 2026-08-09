@@ -18,10 +18,10 @@
 - [x] Examples for every command
 - [x] Human-readable errors
 - [x] Progress reporting
-- [ ] Exit codes documented
+- [x] Exit codes documented (README)
 - [x] Version consistency (single source in `src/cli/cli.ts`, mirrored in `package.json`)
 - [x] README quick start
-- [ ] Demo repository
+- [x] Demo repository (`examples/`)
 
 ## Stage C — Documentation
 
@@ -38,18 +38,17 @@
 
 ## Stage D — Examples
 
-- [ ] `examples/hello-world`
-- [ ] `examples/standards`
-- [ ] `examples/brownfield`
-- [ ] `examples/generated`
+- [x] `examples/hello-world`
+- [x] `examples/standards`
+- [x] `examples/brownfield`
+- [x] `examples/generated`
 
 ## Stage E — OSS
 
 - [x] GitHub Actions (CI on push/PR, Linux/macOS/Windows × Node 20/22/24)
 - [x] Issue templates
 - [x] PR template
-- [ ] Release workflow (tag → npm publish)
-- [ ] npm publish workflow
+- [x] Release workflow (tag → npm publish + draft GitHub release)
 - [x] CODEOWNERS
 
 ## Stage F — Website (`ctl.dooziesoft.com`)
