@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -23,6 +23,41 @@ async function tmp(): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), "doozctl-app-"));
   dirs.push(dir);
   return dir;
+}
+
+/** Create a Standards Package declaring one managed-blocks artifact. */
+async function writePackage(pkg: string): Promise<void> {
+  await writeFile(
+    path.join(pkg, "package.json"),
+    JSON.stringify({
+      format: 1,
+      name: "@dooziesoft/standards",
+      version: "1.0.0",
+      engine: ">=1.0.0",
+      artifacts: [
+        {
+          id: "agents",
+          source: "artifacts/AGENTS.md",
+          destination: "AGENTS.md",
+          merge: "managed-blocks",
+        },
+      ],
+    }),
+  );
+  await mkdir(path.join(pkg, "artifacts"), { recursive: true });
+  await writeFile(
+    path.join(pkg, "artifacts", "AGENTS.md"),
+    [
+      "# AGENTS",
+      "",
+      "<!-- DOOZCTL:BEGIN:v1 repository-analysis -->",
+      "",
+      "Lang: {{analysis.language}}",
+      "",
+      "<!-- DOOZCTL:END:v1 repository-analysis -->",
+    ].join("\n"),
+    "utf-8",
+  );
 }
 
 function buildDeps(): { deps: AppDeps; printed: string[] } {
@@ -90,19 +125,42 @@ describe("App", () => {
     const { engine, calls } = spyEngine();
     const app = new App(engine, buildDeps().deps);
 
-    const commands: Array<keyof App> = ["analyze", "sync", "doctor", "summarize", "status"];
-    for (const cmd of commands) {
-      await (app[cmd] as (args: string[]) => Promise<number>)([]);
+    for (const cmd of ["analyze", "doctor", "summarize", "status"]) {
+      await (app[cmd as keyof App] as (args: string[]) => Promise<number>)([]);
     }
+
+    // sync needs a loadable Standards Package so the app can snapshot
+    // destinations; the spy engine records the pipeline without executing it.
+    const repo = await tmp();
+    const pkg = await tmp();
+    await writePackage(pkg);
+    await app.sync([repo, pkg]);
 
     const executed = calls.map((c) => c.steps);
     expect(executed).toEqual([
       ["analyzeStep", "saveAnalysisStep"],
-      ["loadStep", "resolveVariablesStep", "renderStep", "mergeStep", "validateStep", "writeStep"],
       ["validateStep", "reportStep"],
       ["resolveVariablesStep", "renderStep", "mergeStep", "validateStep", "writeStep"],
       ["analyzeStep", "reportStep"],
+      [
+        "loadStateStep",
+        "loadStep",
+        "resolveVariablesStep",
+        "renderStep",
+        "mergeStep",
+        "validateStep",
+        "writeStep",
+      ],
     ]);
+  });
+
+  it("fails fast when sync is missing arguments", async () => {
+    const { engine, calls } = spyEngine();
+    const app = new App(engine, buildDeps().deps);
+
+    await expect(app.sync([])).rejects.toThrow(/Usage:\s+doozctl sync <repo> <package>/);
+    await expect(app.sync(["/tmp/repo"])).rejects.toThrow(/Usage:\s+doozctl sync <repo> <package>/);
+    expect(calls).toHaveLength(0);
   });
 
   it("never sends a write step to read-only commands", async () => {

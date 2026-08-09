@@ -50,7 +50,18 @@ async function makeRepoAndPackage(): Promise<{ repo: string; pkg: string }> {
     }),
   );
   await mkdir(path.join(pkg, "artifacts"));
-  await writeFile(path.join(pkg, "artifacts", "AGENTS.md"), "Lang: {{analysis.language}}");
+  await writeFile(
+    path.join(pkg, "artifacts", "AGENTS.md"),
+    [
+      "# AGENTS",
+      "",
+      "<!-- DOOZCTL:BEGIN:v1 repository-analysis -->",
+      "",
+      "Lang: {{analysis.language}}",
+      "",
+      "<!-- DOOZCTL:END:v1 repository-analysis -->",
+    ].join("\n"),
+  );
   return { repo, pkg };
 }
 
@@ -118,12 +129,13 @@ describe("doozctl CLI (integration)", () => {
     const dispatcher = buildDispatcher();
     const { repo, pkg } = await makeRepoAndPackage();
 
-    // init and analyze succeed against a real package/repository.
+    // init, sync and analyze succeed against a real package/repository.
     expect(await runCli(["init", repo, pkg], dispatcher)).toBe(0);
+    expect(await runCli(["sync", repo, pkg], dispatcher)).toBe(0);
     expect(await runCli(["analyze", repo], dispatcher)).toBe(0);
 
     // Still-scaffolding commands exit 1.
-    for (const cmd of ["doctor", "summarize", "status", "sync"]) {
+    for (const cmd of ["doctor", "summarize", "status"]) {
       expect(await runCli([cmd, repo], dispatcher)).toBe(1);
     }
   });
@@ -164,6 +176,26 @@ describe("doozctl CLI (integration)", () => {
     expect(streams.out()).toContain("Repository initialized:");
     expect(streams.out()).toContain("- AGENTS.md");
     expect(streams.out()).toContain(".dooz/manifest.json");
+  });
+
+  it("prints a synchronization summary to stdout after a successful sync", async () => {
+    const { repo, pkg } = await makeRepoAndPackage();
+    const streams = capture();
+    const app = new App(new Engine(), {
+      ...buildDeps(),
+      print: (message) => streams.stdout.write(message + "\n"),
+    });
+    const dispatcher = new Dispatcher()
+      .register("init", app.init.bind(app))
+      .register("sync", app.sync.bind(app));
+
+    await runCli(["init", repo, pkg], dispatcher, streams);
+    const code = await runCli(["sync", repo, pkg], dispatcher, streams);
+
+    expect(code).toBe(0);
+    expect(streams.out()).toContain("Synchronizing repository...");
+    expect(streams.out()).toContain("✓ Repository already up to date.");
+    expect(streams.out()).toContain("No changes required.");
   });
 
   it("rejects init with missing arguments and prints usage guidance", async () => {

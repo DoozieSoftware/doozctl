@@ -1,6 +1,6 @@
 import { NotImplementedError } from "../errors.js";
 import type { GitService } from "../infra/git/git.js";
-import type { RenderedArtifact } from "../model/model.js";
+import type { Manifest, RenderedArtifact } from "../model/model.js";
 import type { MergeStrategy } from "../model/model.js";
 import type { RepositoryStore } from "../store/repository-store.js";
 import { Storage } from "../store/storage.js";
@@ -69,6 +69,55 @@ export function loadStep(deps: LoadDeps): PipelineStep {
     const pkg = await deps.loader.load(ctx.standardsDir);
     ctx.standards = pkg;
     ctx.artifacts = pkg.artifacts;
+  });
+}
+
+/** Dependencies for the load-repository-state step. */
+export interface LoadStateDeps {
+  store: RepositoryStore;
+}
+
+/**
+ * Load Repository State: verify the repository is initialized and load the
+ * persisted engine state (`.dooz/manifest.json` and
+ * `.ai/repository-analysis.json`). sync re-renders from the stored analysis —
+ * it never re-analyzes, so re-running it is deterministic.
+ */
+export function loadRepositoryStateStep(deps: LoadStateDeps): PipelineStep {
+  return named("loadState", async (ctx) => {
+    const repo = new Storage(ctx.root);
+
+    if (!(await repo.exists(".dooz", "manifest.json"))) {
+      throw new Error(
+        "repository is not initialized: .dooz/manifest.json is missing. Run doozctl init <repo> <package> first.",
+      );
+    }
+    let manifest: Manifest;
+    try {
+      manifest = await deps.store.loadManifest(ctx.root);
+    } catch {
+      throw new Error(
+        "repository manifest is malformed: .dooz/manifest.json. Re-run doozctl init to repair it.",
+      );
+    }
+    if (manifest.version !== 1) {
+      throw new Error(
+        `unsupported manifest version ${manifest.version}; expected version 1. Re-run doozctl init to repair it.`,
+      );
+    }
+
+    if (!(await repo.exists(".ai", "repository-analysis.json"))) {
+      throw new Error(
+        "repository analysis is missing: .ai/repository-analysis.json. Run doozctl init or doozctl analyze first.",
+      );
+    }
+    try {
+      ctx.analysis = await deps.store.loadAnalysis(ctx.root);
+    } catch {
+      throw new Error(
+        "repository analysis is malformed: .ai/repository-analysis.json. Re-run doozctl init or doozctl analyze to repair it.",
+      );
+    }
   });
 }
 

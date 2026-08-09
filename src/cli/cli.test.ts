@@ -57,6 +57,16 @@ describe("humanizeError", () => {
     expect(message).toContain("Convert that file to a managed-blocks artifact");
   });
 
+  it("rewrites a replace-generated refusal with guidance", () => {
+    const message = humanizeError(
+      new Error(
+        "merge: existing file is not engine-generated; refusing replace-generated overwrite",
+      ),
+    );
+    expect(message).toContain("was left untouched");
+    expect(message).toContain("carry the engine-generated marker");
+  });
+
   it("passes through unknown errors unchanged", () => {
     expect(humanizeError(new Error("kaboom"))).toBe("kaboom");
   });

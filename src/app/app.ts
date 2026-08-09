@@ -16,6 +16,7 @@ import {
   summarizePipeline,
   syncPipeline,
 } from "../engine/pipelines.js";
+import { Storage } from "../store/storage.js";
 
 /**
  * Application Services layer: exposes the use cases the CLI commands map to.
@@ -59,9 +60,48 @@ export class App {
     return this.run(analyzePipeline(this.deps), args);
   }
 
-  /** sync: re-render managed artifacts, preserving developer content. */
+  /**
+   * sync: re-render all managed artifacts from the persisted repository state,
+   * preserving developer content, and print a summary. Never partially
+   * synchronizes — the pipeline short-circuits before writing if any merge
+   * fails, leaving the repository unchanged.
+   */
   async sync(args: string[]): Promise<number> {
-    return this.run(syncPipeline(this.deps), args);
+    if (args.length < 2) {
+      throw new Error(SYNC_USAGE);
+    }
+    const root = args[0] as string;
+    const standardsDir = args[1] as string;
+
+    this.deps.print("Synchronizing repository...");
+    this.deps.print("");
+
+    const pkg = await this.deps.loader.load(standardsDir);
+    const destinations = pkg.artifacts.map((artifact) => artifact.destination.path);
+    const before = await this.snapshotDestinations(root, destinations);
+
+    await this.run(syncPipeline(this.deps), args);
+
+    const after = await this.snapshotDestinations(root, destinations);
+    const updated = destinations.filter((dest) => before.get(dest) !== after.get(dest)).length;
+
+    if (updated === 0) {
+      this.deps.print("✓ Repository already up to date.");
+      this.deps.print("");
+      this.deps.print("No changes required.");
+      return 0;
+    }
+
+    this.deps.print("✓ Loaded repository state");
+    this.deps.print("✓ Loaded Standards Package");
+    this.deps.print(`✓ Rendered ${destinations.length} artifacts`);
+    this.deps.print(`✓ Updated ${updated} artifacts`);
+    this.deps.print(`✓ Unchanged ${destinations.length - updated} artifacts`);
+    this.deps.print("");
+    this.deps.print("Done.");
+    this.deps.print("");
+    this.deps.print("Repository synchronized successfully.");
+    return 0;
   }
 
   /** doctor: validate the repository and report. Read-only. */
@@ -84,7 +124,7 @@ export class App {
     return 0;
   }
 
-  /** The declared artifact destinations, sorted, for the success report. */
+  /** The declared artifact destinations, sorted, for the init report. */
   private async declaredDestinations(standardsDir: string): Promise<string[]> {
     try {
       const pkg = await this.deps.loader.load(standardsDir);
@@ -92,6 +132,29 @@ export class App {
     } catch {
       return [];
     }
+  }
+
+  /** Snapshot each destination's current content, so sync can report updated vs unchanged. */
+  private async snapshotDestinations(
+    root: string,
+    destinations: string[],
+  ): Promise<Map<string, string>> {
+    const repo = new Storage(root);
+    const snapshot = new Map<string, string>();
+    for (const dest of destinations) {
+      let content: string;
+      try {
+        content = await repo.read(dest);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+          content = "";
+        } else {
+          throw error;
+        }
+      }
+      snapshot.set(dest, content);
+    }
+    return snapshot;
   }
 
   private formatInitReport(root: string, destinations: string[]): string {
@@ -114,4 +177,12 @@ const INIT_USAGE = [
   "",
   "Usage:   doozctl init <repo> <package>",
   "Example: doozctl init . ./standards",
+].join("\n");
+
+/** User-facing usage for sync, shown when arguments are missing. */
+const SYNC_USAGE = [
+  "sync requires a repository path and a Standards Package directory.",
+  "",
+  "Usage:   doozctl sync <repo> <package>",
+  "Example: doozctl sync . ./standards",
 ].join("\n");

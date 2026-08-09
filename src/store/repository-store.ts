@@ -22,9 +22,18 @@ export class RepositoryStore {
     return parseJson<Manifest>(raw);
   }
 
-  /** Save the manifest. */
+  /**
+   * Save the manifest. A byte-identical manifest is left untouched so
+   * idempotent runs (repeated init, sync) cause no unnecessary writes or
+   * timestamp changes.
+   */
   async saveManifest(dir: string, manifest: Manifest): Promise<void> {
-    await new Storage(dir).atomicWrite(serializeJson(manifest), ".dooz", "manifest.json");
+    const storage = new Storage(dir);
+    const serialized = serializeJson(manifest);
+    if (await this.readMatches(storage, serialized, ".dooz", "manifest.json")) {
+      return;
+    }
+    await storage.atomicWrite(serialized, ".dooz", "manifest.json");
   }
 
   /** Load the repository analysis. */
@@ -33,9 +42,30 @@ export class RepositoryStore {
     return parseJson<Analysis>(raw);
   }
 
-  /** Save the repository analysis. */
+  /**
+   * Save the repository analysis. A byte-identical analysis is left untouched
+   * so idempotent runs cause no unnecessary writes or timestamp changes.
+   */
   async saveAnalysis(dir: string, analysis: Analysis): Promise<void> {
-    await new Storage(dir).atomicWrite(serializeJson(analysis), ".ai", "repository-analysis.json");
+    const storage = new Storage(dir);
+    const serialized = serializeJson(analysis);
+    if (await this.readMatches(storage, serialized, ".ai", "repository-analysis.json")) {
+      return;
+    }
+    await storage.atomicWrite(serialized, ".ai", "repository-analysis.json");
+  }
+
+  /** Whether the file at the given parts already holds exactly `expected`. */
+  private async readMatches(
+    storage: Storage,
+    expected: string,
+    ...parts: string[]
+  ): Promise<boolean> {
+    try {
+      return (await storage.read(...parts)) === expected;
+    } catch {
+      return false;
+    }
   }
 
   /** Read the current context. */

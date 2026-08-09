@@ -87,7 +87,14 @@ export function humanizeError(error: unknown): string {
   if (message.includes("no managed block markers")) {
     return [
       "A destination file already exists but is not engine-managed, so it was left untouched.",
-      "Convert that file to a managed-blocks artifact (or remove it) and run init again.",
+      "Convert that file to a managed-blocks artifact (or remove it), then run init or sync again.",
+    ].join("\n");
+  }
+
+  if (message.includes("refusing replace-generated overwrite")) {
+    return [
+      "A destination file already exists and is not engine-generated, so it was left untouched.",
+      "replace-generated only rewrites files that carry the engine-generated marker. Convert or remove the file, then run sync again.",
     ].join("\n");
   }
 

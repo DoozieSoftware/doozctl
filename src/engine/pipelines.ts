@@ -2,6 +2,7 @@ import type { PipelineStep } from "./engine.js";
 import type {
   AnalyzeDeps,
   LoadDeps,
+  LoadStateDeps,
   MergeDeps,
   SaveAnalysisDeps,
   ValidateDeps,
@@ -9,6 +10,7 @@ import type {
 } from "./steps.js";
 import {
   analyzeStep,
+  loadRepositoryStateStep,
   loadStep,
   mergeStep,
   renderStep,
@@ -25,6 +27,7 @@ import {
  * Every command does not run the same pipeline. Read-only commands (analyze,
  * status) never reach write; doctor is validate + report; summarize appends a
  * session. init is the only command that runs the full seven-stage pipeline.
+ * sync re-renders from persisted repository state (it never re-analyzes).
  */
 
 /** The full init pipeline: Analyze → Load → Resolve → Render → Merge → Validate → Write. */
@@ -47,11 +50,17 @@ export function analyzePipeline(deps: AnalyzeDeps & SaveAnalysisDeps): PipelineS
   return [analyzeStep(deps), saveAnalysisStep(deps)];
 }
 
-/** Sync: re-render all managed artifacts, preserving developer content. */
+/**
+ * Sync: re-render all managed artifacts from the persisted repository state,
+ * preserving developer content. Loads the stored analysis instead of
+ * re-analyzing so repeated runs are deterministic. Existing managed artifacts
+ * are read by the merge stage.
+ */
 export function syncPipeline(
-  deps: LoadDeps & MergeDeps & ValidateDeps & WriteDeps,
+  deps: LoadStateDeps & LoadDeps & MergeDeps & ValidateDeps & WriteDeps,
 ): PipelineStep[] {
   return [
+    loadRepositoryStateStep(deps),
     loadStep(deps),
     resolveVariablesStep(),
     renderStep(),
