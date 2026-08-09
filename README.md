@@ -63,19 +63,14 @@ Portable repository memory. Cursor, Claude, Codex, Gemini, OpenCode, and future 
 
 ## Quick start
 
-Pre-release (v0.3.0-alpha.1). DoozCTL takes two arguments: a repository to initialize and a Standards Package directory.
+Install and initialize the current directory against a local standards package:
 
 ```sh
-doozctl init <repo> <package>
-```
-
-Example — initialize the current directory against a local standards package:
-
-```sh
+npm install -g @dooziesoft/doozctl
 doozctl init . ./standards
 ```
 
-On success, `init` analyzes the repository, renders each init-lifecycle artifact the package declares (for example `AGENTS.md`), merges it into existing files without touching unmanaged content, and writes the engine state:
+`init` analyzes the repository, renders each init-lifecycle artifact the package declares (for example `AGENTS.md`), merges it into existing files without touching unmanaged content, and writes the engine state:
 
 ```text
 Repository initialized: .
@@ -120,18 +115,17 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the layered design and [spec.md](spec
 
 ## Status
 
-Core engine complete (v0.3.0-alpha.1). Orchestration in progress:
+All six workflows are implemented and tested (246 tests, 94.7% coverage):
 
-- ✅ Analyzer
-- ✅ Variable Resolver
-- ✅ Standards Loader
-- ✅ Renderer
-- ✅ Merge Engine
 - ✅ init
 - ✅ sync
+- ✅ analyze
 - ✅ summarize
 - ✅ doctor
 - ✅ status
+
+See [ROADMAP.md](ROADMAP.md) for what is planned next and
+[RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) for the v1.0 release gate.
 
 ## v1.0 definition
 

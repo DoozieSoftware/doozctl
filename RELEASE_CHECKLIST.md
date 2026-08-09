@@ -35,6 +35,7 @@
 - [x] CODE_OF_CONDUCT
 - [x] LICENSE
 - [x] Standards Package Spec
+- [x] FAQ
 
 ## Stage D — Examples
 
@@ -49,15 +50,17 @@
 - [x] Issue templates
 - [x] PR template
 - [x] Release workflow (tag → npm publish + draft GitHub release)
+- [x] Labels documentation
 - [x] CODEOWNERS
 
 ## Stage F — Website (`ctl.dooziesoft.com`)
 
-- [ ] Landing page
-- [ ] Install / init / sync / summarize / doctor / status
-- [ ] Architecture diagram
-- [ ] Philosophy
-- [ ] Links
+- [x] Landing page
+- [x] Install / init / sync / summarize / doctor / status
+- [x] Architecture diagram
+- [x] Philosophy
+- [x] Links
+- [x] GitHub Pages workflow + CNAME (DNS handoff pending)
 
 ## Stage G — Release Review
 
