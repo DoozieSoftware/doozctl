@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { realpathSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -27,7 +28,7 @@ export class GitService {
     if (rootOut === null) {
       return null;
     }
-    const root = path.resolve(rootOut);
+    const root = realpathSync(path.resolve(rootOut));
     const branchOut = await this.git(root, ["rev-parse", "--abbrev-ref", "HEAD"]);
     const branch = branchOut !== null && branchOut !== "HEAD" ? branchOut : null;
     const status = await this.git(root, ["status", "--porcelain"]);

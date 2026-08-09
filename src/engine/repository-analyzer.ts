@@ -236,7 +236,9 @@ export class RepositoryAnalyzer implements Analyzer {
             await visit(path.join(dir, entry.name));
           }
         } else if (entry.isFile()) {
-          files.push(path.relative(root, path.join(dir, entry.name)));
+          // Normalize to POSIX separators so detection markers (which use "/")
+          // match identically on Windows, where path.relative emits "\".
+          files.push(path.relative(root, path.join(dir, entry.name)).split(path.sep).join("/"));
         }
       }
     };
