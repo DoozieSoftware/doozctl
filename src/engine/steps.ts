@@ -1,6 +1,6 @@
 import { NotImplementedError } from "../errors.js";
 import type { GitService } from "../infra/git/git.js";
-import type { Manifest, RenderedArtifact } from "../model/model.js";
+import type { Manifest, RenderedArtifact, Workflow } from "../model/model.js";
 import type { MergeStrategy } from "../model/model.js";
 import type { RepositoryStore } from "../store/repository-store.js";
 import { Storage } from "../store/storage.js";
@@ -69,6 +69,18 @@ export function loadStep(deps: LoadDeps): PipelineStep {
     const pkg = await deps.loader.load(ctx.standardsDir);
     ctx.standards = pkg;
     ctx.artifacts = pkg.artifacts;
+  });
+}
+
+/**
+ * Lifecycle: keep only the artifacts that participate in the current workflow.
+ * Artifacts outside the workflow's lifecycle are invisible to it — they are
+ * not rendered, merged or written. This is how append-only session artifacts
+ * stay untouched by init and sync.
+ */
+export function lifecycleStep(workflow: Workflow): PipelineStep {
+  return named("lifecycle", async (ctx) => {
+    ctx.artifacts = ctx.artifacts.filter((artifact) => artifact.lifecycle.includes(workflow));
   });
 }
 
@@ -195,6 +207,12 @@ export interface WriteDeps {
  * state — the manifest (`.dooz/manifest.json`) and repository analysis
  * (`.ai/repository-analysis.json`). A destination is written only when its
  * content differs from what is already on disk, so re-running init is a no-op.
+ *
+ * The manifest records every artifact the engine has ever generated. Because a
+ * workflow only sees its own lifecycle, the manifest is the union of the
+ * previously recorded ids and the ids written by this run — otherwise an
+ * init-only artifact would disappear from the manifest the first time sync
+ * runs.
  */
 export function writeStep(deps: WriteDeps): PipelineStep {
   return named("write", async (ctx) => {
@@ -209,11 +227,44 @@ export function writeStep(deps: WriteDeps): PipelineStep {
     }
     await deps.store.saveManifest(ctx.root, {
       version: 1,
-      artifacts: ctx.merged.map((m) => m.artifact.id),
+      artifacts: unionIds(
+        await readManifestIds(repo),
+        ctx.merged.map((m) => m.artifact.id),
+      ),
     });
     if (ctx.analysis !== null) {
       await deps.store.saveAnalysis(ctx.root, ctx.analysis);
     }
+  });
+}
+
+/** Read the artifact ids recorded in the engine manifest, or [] when absent. */
+async function readManifestIds(repo: Storage): Promise<string[]> {
+  const raw = await readOrNull(repo, ".dooz/manifest.json");
+  if (raw === null) {
+    return [];
+  }
+  let manifest: { artifacts?: unknown };
+  try {
+    manifest = JSON.parse(raw) as { artifacts?: unknown };
+  } catch (error) {
+    throw new Error("malformed manifest: .dooz/manifest.json", { cause: error });
+  }
+  if (!Array.isArray(manifest.artifacts)) {
+    throw new Error("malformed manifest: .dooz/manifest.json: artifacts must be an array");
+  }
+  return manifest.artifacts.filter((id): id is string => typeof id === "string");
+}
+
+/** Union preserving first-occurrence order, deterministic across runs. */
+function unionIds(a: readonly string[], b: readonly string[]): string[] {
+  const seen = new Set<string>();
+  return [...a, ...b].filter((id) => {
+    if (seen.has(id)) {
+      return false;
+    }
+    seen.add(id);
+    return true;
   });
 }
 

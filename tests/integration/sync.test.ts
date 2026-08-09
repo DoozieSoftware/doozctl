@@ -74,13 +74,14 @@ async function writePackage(
     source: string;
     destination: string;
     merge: "managed-blocks" | "overwrite" | "append" | "replace-generated";
+    lifecycle: Array<"init" | "sync" | "summarize">;
   }>,
   templates: Record<string, string>,
 ): Promise<void> {
   await writeFile(
     path.join(pkg, "package.json"),
     JSON.stringify({
-      format: 1,
+      format: 2,
       name: "@dooziesoft/standards",
       version: "1.0.0",
       engine: ">=1.0.0",
@@ -103,6 +104,7 @@ async function writeManagedPackage(pkg: string, source: string = MANAGED_SOURCE)
         source: "artifacts/AGENTS.md",
         destination: "AGENTS.md",
         merge: "managed-blocks",
+        lifecycle: ["init", "sync"],
       },
     ],
     { "AGENTS.md": source },
@@ -236,6 +238,7 @@ describe("doozctl sync (integration)", () => {
           source: "artifacts/state.json",
           destination: ".dooz/state.json",
           merge: "overwrite",
+          lifecycle: ["init", "sync"],
         },
       ],
       { "state.json": '{"render":"{{analysis.language}}"}\n' },
@@ -255,7 +258,7 @@ describe("doozctl sync (integration)", () => {
     );
   });
 
-  it("append adds the rendered content after existing content", async () => {
+  it("skips summarize-only append artifacts during init and sync", async () => {
     const repo = await tmp("doozctl-sync-repo-");
     const pkg = await tmp("doozctl-sync-pkg-");
     await writeRepo(repo);
@@ -263,25 +266,79 @@ describe("doozctl sync (integration)", () => {
       pkg,
       [
         {
-          id: "log",
+          id: "agents",
+          source: "artifacts/AGENTS.md",
+          destination: "AGENTS.md",
+          merge: "managed-blocks",
+          lifecycle: ["init", "sync"],
+        },
+        {
+          id: "session",
           source: "artifacts/log.md",
           destination: ".ai/sessions/log.md",
           merge: "append",
+          lifecycle: ["summarize"],
         },
       ],
-      { "log.md": "session {{analysis.language}}\n" },
+      { "AGENTS.md": MANAGED_SOURCE, "log.md": "session {{analysis.language}}\n" },
     );
 
     const run = app();
     await run.init([repo, pkg]);
-    await expect(readFile(path.join(repo, ".ai", "sessions", "log.md"), "utf-8")).resolves.toBe(
-      "session TypeScript\n",
+    await run.sync([repo, pkg]);
+
+    await expect(readFile(path.join(repo, "AGENTS.md"), "utf-8")).resolves.toContain(
+      "Lang: TypeScript",
+    );
+    await expect(
+      readFile(path.join(repo, ".ai", "sessions", "log.md"), "utf-8"),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("skips init-only artifacts during sync and preserves them in the manifest", async () => {
+    const repo = await tmp("doozctl-sync-repo-");
+    const pkg = await tmp("doozctl-sync-pkg-");
+    await writeRepo(repo);
+    await writePackage(
+      pkg,
+      [
+        {
+          id: "gitignore",
+          source: "artifacts/gitignore",
+          destination: ".gitignore",
+          merge: "overwrite",
+          lifecycle: ["init"],
+        },
+        {
+          id: "agents",
+          source: "artifacts/AGENTS.md",
+          destination: "AGENTS.md",
+          merge: "managed-blocks",
+          lifecycle: ["init", "sync"],
+        },
+      ],
+      { gitignore: "node_modules/\n", "AGENTS.md": MANAGED_SOURCE },
     );
 
-    await expect(run.sync([repo, pkg])).resolves.toBe(0);
-    await expect(readFile(path.join(repo, ".ai", "sessions", "log.md"), "utf-8")).resolves.toBe(
-      "session TypeScript\nsession TypeScript\n",
+    const run = app();
+    await run.init([repo, pkg]);
+    const firstInit = await readFile(path.join(repo, ".gitignore"), "utf-8");
+    expect(firstInit).toContain("node_modules");
+
+    await writeFile(path.join(repo, ".gitignore"), "node_modules/\n\n# local\n.env\n", "utf-8");
+
+    let printed = "";
+    const out = app((message) => (printed += message + "\n"));
+    await expect(out.sync([repo, pkg])).resolves.toBe(0);
+
+    expect(printed).toContain("✓ Skipped 1 artifacts (not in sync lifecycle)");
+    await expect(readFile(path.join(repo, ".gitignore"), "utf-8")).resolves.toBe(
+      "node_modules/\n\n# local\n.env\n",
     );
+    const manifest = JSON.parse(
+      await readFile(path.join(repo, ".dooz", "manifest.json"), "utf-8"),
+    ) as { artifacts: string[] };
+    expect(manifest.artifacts).toEqual(["gitignore", "agents"]);
   });
 
   it("replace-generated rewrites only engine-generated files", async () => {
@@ -296,6 +353,7 @@ describe("doozctl sync (integration)", () => {
           source: "artifacts/wrapper.md",
           destination: "wrapper.md",
           merge: "replace-generated",
+          lifecycle: ["init", "sync"],
         },
       ],
       { "wrapper.md": "<!-- DOOZCTL:GENERATED:v1 -->\nRead AGENTS.md first.\n" },

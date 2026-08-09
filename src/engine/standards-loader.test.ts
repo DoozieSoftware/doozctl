@@ -33,7 +33,7 @@ async function writePackage(
 }
 
 const validManifest = {
-  format: 1,
+  format: 2,
   name: "@dooziesoft/standards",
   version: "1.0.0",
   engine: ">=1.0.0",
@@ -43,12 +43,14 @@ const validManifest = {
       source: "artifacts/AGENTS.md",
       destination: "AGENTS.md",
       merge: "managed-blocks",
+      lifecycle: ["init", "sync"],
     },
     {
       id: "wrappers",
       source: "artifacts/README.md",
       destination: "docs/README.md",
       merge: "overwrite",
+      lifecycle: ["sync"],
     },
   ],
 };
@@ -63,7 +65,7 @@ describe("StandardsPackageLoader", () => {
 
     const pkg = await loader.load(dir);
 
-    expect(pkg.format).toBe(1);
+    expect(pkg.format).toBe(2);
     expect(pkg.name).toBe("@dooziesoft/standards");
     expect(pkg.version).toBe("1.0.0");
     expect(pkg.engine).toBe(">=1.0.0");
@@ -73,8 +75,10 @@ describe("StandardsPackageLoader", () => {
       source: { path: "artifacts/AGENTS.md" },
       destination: { path: "AGENTS.md" },
       mergeStrategy: "managed-blocks",
+      lifecycle: ["init", "sync"],
     });
     expect(pkg.artifacts[1]?.mergeStrategy).toBe("overwrite");
+    expect(pkg.artifacts[1]?.lifecycle).toEqual(["sync"]);
   });
 
   it("does not read artifact contents", async () => {
@@ -122,6 +126,44 @@ describe("StandardsPackageLoader", () => {
       artifacts: [{ ...validManifest.artifacts[0], merge: "merge-everything" }],
     });
     await expect(loader.load(dir)).rejects.toThrow(/unsupported merge strategy/);
+  });
+
+  it("rejects an artifact without a lifecycle", async () => {
+    const dir = await tmp();
+    await writePackage(
+      dir,
+      {
+        ...validManifest,
+        artifacts: [
+          {
+            id: "agents",
+            source: "artifacts/AGENTS.md",
+            destination: "AGENTS.md",
+            merge: "managed-blocks",
+          },
+        ],
+      },
+      { "artifacts/AGENTS.md": "x" },
+    );
+    await expect(loader.load(dir)).rejects.toThrow(/lifecycle must be a non-empty array/);
+  });
+
+  it("rejects an empty lifecycle array", async () => {
+    const dir = await tmp();
+    await writePackage(dir, {
+      ...validManifest,
+      artifacts: [{ ...validManifest.artifacts[0], lifecycle: [] }],
+    });
+    await expect(loader.load(dir)).rejects.toThrow(/lifecycle must be a non-empty array/);
+  });
+
+  it("rejects a lifecycle value outside the supported workflows", async () => {
+    const dir = await tmp();
+    await writePackage(dir, {
+      ...validManifest,
+      artifacts: [{ ...validManifest.artifacts[0], lifecycle: ["deploy"] }],
+    });
+    await expect(loader.load(dir)).rejects.toThrow(/unsupported lifecycle value: deploy/);
   });
 
   it("rejects when an artifact source file is missing", async () => {

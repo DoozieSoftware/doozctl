@@ -36,6 +36,17 @@ export const MERGE_STRATEGIES: readonly MergeStrategy[] = [
   "replace-generated",
 ];
 
+/**
+ * The workflows an artifact participates in. An artifact is processed only by
+ * the commands whose lifecycle names it — merge describes how content combines,
+ * lifecycle describes when. An artifact invisible to a workflow is not loaded,
+ * rendered, merged or written by that workflow.
+ */
+export type Workflow = "init" | "sync" | "summarize";
+
+/** All supported workflows, in deterministic (alphabetical) order. */
+export const WORKFLOWS: readonly Workflow[] = ["init", "summarize", "sync"];
+
 /** Where an artifact's template originates inside the Standards Package. */
 export interface ArtifactSource {
   /** Path to the source template within the Standards Package. */
@@ -68,6 +79,8 @@ export interface Artifact {
   readonly destination: ArtifactDestination;
   /** How generated content combines with existing content. */
   readonly mergeStrategy: MergeStrategy;
+  /** The workflows that process this artifact. */
+  readonly lifecycle: readonly Workflow[];
   /** Values substituted during rendering. */
   readonly variables: Variables;
   /** Optional schema reference used during validation. */
@@ -88,6 +101,7 @@ export interface ArtifactInput {
   readonly source: ArtifactSource;
   readonly destination: ArtifactDestination;
   readonly mergeStrategy: MergeStrategy;
+  readonly lifecycle: readonly Workflow[];
   readonly variables?: Variables;
   readonly schema?: string;
   readonly metadata?: ArtifactMetadata;
@@ -111,6 +125,7 @@ export function createArtifact(input: ArtifactInput): Artifact {
     source: input.source,
     destination: input.destination,
     mergeStrategy: input.mergeStrategy,
+    lifecycle: input.lifecycle,
     variables: input.variables ?? {},
     metadata: input.metadata ?? {},
     ...(input.schema !== undefined ? { schema: input.schema } : {}),
@@ -151,6 +166,7 @@ export function artifactEquals(a: Artifact, b: Artifact): boolean {
     a.destination.path === b.destination.path &&
     a.mergeStrategy === b.mergeStrategy &&
     a.schema === b.schema &&
+    deepEqual(a.lifecycle, b.lifecycle) &&
     deepEqual(a.variables, b.variables) &&
     deepEqual(a.metadata, b.metadata)
   );

@@ -65,7 +65,7 @@ async function writePackage(pkg: string, template: string = MANAGED_TEMPLATE): P
   await writeFile(
     path.join(pkg, "package.json"),
     JSON.stringify({
-      format: 1,
+      format: 2,
       name: "@dooziesoft/standards",
       version: "1.0.0",
       engine: ">=1.0.0",
@@ -75,6 +75,7 @@ async function writePackage(pkg: string, template: string = MANAGED_TEMPLATE): P
           source: "artifacts/AGENTS.md",
           destination: "AGENTS.md",
           merge: "managed-blocks",
+          lifecycle: ["init", "sync"],
         },
       ],
     }),

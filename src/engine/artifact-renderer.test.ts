@@ -83,6 +83,7 @@ describe("ArtifactRenderer", () => {
       source: { path: source },
       destination: { path: "AGENTS.md" },
       mergeStrategy: "managed-blocks",
+      lifecycle: ["init", "sync"],
     });
   }
 

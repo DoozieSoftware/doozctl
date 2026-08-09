@@ -10,6 +10,7 @@ import type {
 } from "./steps.js";
 import {
   analyzeStep,
+  lifecycleStep,
   loadRepositoryStateStep,
   loadStep,
   mergeStep,
@@ -30,13 +31,14 @@ import {
  * sync re-renders from persisted repository state (it never re-analyzes).
  */
 
-/** The full init pipeline: Analyze → Load → Resolve → Render → Merge → Validate → Write. */
+/** The full init pipeline: Analyze → Load → Lifecycle → Resolve → Render → Merge → Validate → Write. */
 export function initPipeline(
   deps: AnalyzeDeps & LoadDeps & MergeDeps & ValidateDeps & WriteDeps,
 ): PipelineStep[] {
   return [
     analyzeStep(deps),
     loadStep(deps),
+    lifecycleStep("init"),
     resolveVariablesStep(),
     renderStep(),
     mergeStep(deps),
@@ -51,10 +53,10 @@ export function analyzePipeline(deps: AnalyzeDeps & SaveAnalysisDeps): PipelineS
 }
 
 /**
- * Sync: re-render all managed artifacts from the persisted repository state,
- * preserving developer content. Loads the stored analysis instead of
- * re-analyzing so repeated runs are deterministic. Existing managed artifacts
- * are read by the merge stage.
+ * Sync: re-render the managed artifacts in the sync lifecycle from the
+ * persisted repository state, preserving developer content. Loads the stored
+ * analysis instead of re-analyzing so repeated runs are deterministic. Existing
+ * managed artifacts are read by the merge stage.
  */
 export function syncPipeline(
   deps: LoadStateDeps & LoadDeps & MergeDeps & ValidateDeps & WriteDeps,
@@ -62,6 +64,7 @@ export function syncPipeline(
   return [
     loadRepositoryStateStep(deps),
     loadStep(deps),
+    lifecycleStep("sync"),
     resolveVariablesStep(),
     renderStep(),
     mergeStep(deps),
@@ -75,9 +78,13 @@ export function doctorPipeline(deps: ValidateDeps): PipelineStep[] {
   return [validateStep(deps), reportStep()];
 }
 
-/** Summarize: append an immutable session and update context. */
-export function summarizePipeline(deps: MergeDeps & ValidateDeps & WriteDeps): PipelineStep[] {
+/** Summarize: load the package, keep summarize-lifecycle artifacts, append an immutable session and update context. */
+export function summarizePipeline(
+  deps: LoadDeps & MergeDeps & ValidateDeps & WriteDeps,
+): PipelineStep[] {
   return [
+    loadStep(deps),
+    lifecycleStep("summarize"),
     resolveVariablesStep(),
     renderStep(),
     mergeStep(deps),

@@ -1,5 +1,5 @@
-import { createArtifact, MERGE_STRATEGIES } from "../model/artifact.js";
-import type { Artifact, MergeStrategy, StandardsPackage } from "../model/model.js";
+import { createArtifact, MERGE_STRATEGIES, WORKFLOWS } from "../model/artifact.js";
+import type { Artifact, MergeStrategy, StandardsPackage, Workflow } from "../model/model.js";
 import { Storage } from "../store/storage.js";
 import type { StandardsLoader } from "./contracts.js";
 
@@ -7,16 +7,16 @@ import type { StandardsLoader } from "./contracts.js";
  * Standards Package Loader: loads a package exactly as specified in SPEC.md.
  *
  * Reads the manifest, validates only what the contract requires (package
- * exists, JSON valid, artifact source exists, merge strategy valid, supported
- * format), and returns the declared artifacts. It knows nothing about artifact
- * names, AGENTS.md, rendering, or variables. All filesystem access goes
+ * exists, JSON valid, artifact source exists, merge strategy valid, lifecycle
+ * valid, supported format), and returns the declared artifacts. It knows
+ * nothing about artifact names, AGENTS.md, rendering, or variables. All filesystem access goes
  * through Storage, which keeps a package from probing paths outside itself.
  * Destination paths are intentionally not validated here — the contract
  * validates sources only; destinations are guarded by Storage when written.
  */
 
 const MANIFEST_FILE = "package.json";
-const SUPPORTED_FORMAT = 1;
+const SUPPORTED_FORMAT = 2;
 
 /** The raw manifest as parsed from package.json. */
 interface ManifestJson {
@@ -96,13 +96,29 @@ export class StandardsPackageLoader implements StandardsLoader {
     const destination = this.string(json.destination, "destination");
     const merge = this.string(json.merge, "merge");
     this.assertMergeStrategy(merge);
+    const lifecycle = this.lifecycle(json.lifecycle);
     await this.assertSourceExists(store, source);
     return createArtifact({
       id,
       source: { path: source },
       destination: { path: destination },
       mergeStrategy: merge as MergeStrategy,
+      lifecycle,
     });
+  }
+
+  private lifecycle(value: unknown): Workflow[] {
+    if (!Array.isArray(value) || value.length === 0) {
+      throw new Error("invalid standards package: lifecycle must be a non-empty array");
+    }
+    const lifecycle: Workflow[] = [];
+    for (const entry of value) {
+      if (typeof entry !== "string" || !(WORKFLOWS as readonly string[]).includes(entry)) {
+        throw new Error(`invalid standards package: unsupported lifecycle value: ${String(entry)}`);
+      }
+      lifecycle.push(entry as Workflow);
+    }
+    return lifecycle;
   }
 
   private assertMergeStrategy(merge: string): void {

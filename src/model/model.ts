@@ -14,6 +14,7 @@ export type {
   MergeStrategy,
   RenderedArtifact,
   Variables,
+  Workflow,
   artifactEquals,
   createArtifact,
 } from "./artifact.js";

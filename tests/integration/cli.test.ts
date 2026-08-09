@@ -35,7 +35,7 @@ async function makeRepoAndPackage(): Promise<{ repo: string; pkg: string }> {
   await writeFile(
     path.join(pkg, "package.json"),
     JSON.stringify({
-      format: 1,
+      format: 2,
       name: "@dooziesoft/standards",
       version: "1.0.0",
       engine: ">=1.0.0",
@@ -45,6 +45,7 @@ async function makeRepoAndPackage(): Promise<{ repo: string; pkg: string }> {
           source: "artifacts/AGENTS.md",
           destination: "AGENTS.md",
           merge: "managed-blocks",
+          lifecycle: ["init", "sync"],
         },
       ],
     }),

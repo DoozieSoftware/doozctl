@@ -13,6 +13,7 @@ import type { ExecutionContext, PipelineStep } from "./engine.js";
 import { StandardsPackageLoader } from "./standards-loader.js";
 import {
   analyzeStep,
+  lifecycleStep,
   loadStep,
   mergeStep,
   renderStep,
@@ -49,7 +50,7 @@ async function writePackage(
 }
 
 const validManifest = {
-  format: 1,
+  format: 2,
   name: "@dooziesoft/standards",
   version: "1.0.0",
   engine: ">=1.0.0",
@@ -59,6 +60,7 @@ const validManifest = {
       source: "artifacts/AGENTS.md",
       destination: "AGENTS.md",
       merge: "managed-blocks",
+      lifecycle: ["init", "sync"],
     },
   ],
 };
@@ -116,6 +118,55 @@ describe("pipeline steps", () => {
     expect(ctx.artifacts[0]?.id).toBe("agents");
   });
 
+  it("lifecycle step keeps only artifacts in the workflow lifecycle", async () => {
+    const initOnly = createArtifact({
+      id: "gitignore",
+      source: { path: "a.md" },
+      destination: { path: "a.md" },
+      mergeStrategy: "overwrite",
+      lifecycle: ["init"],
+    });
+    const both = createArtifact({
+      id: "agents",
+      source: { path: "b.md" },
+      destination: { path: "b.md" },
+      mergeStrategy: "managed-blocks",
+      lifecycle: ["init", "sync"],
+    });
+    const summarizeOnly = createArtifact({
+      id: "session",
+      source: { path: "c.md" },
+      destination: { path: "c.md" },
+      mergeStrategy: "append",
+      lifecycle: ["summarize"],
+    });
+    const ctx = await runSteps([
+      async (c) => {
+        c.artifacts = [initOnly, both, summarizeOnly];
+      },
+      lifecycleStep("sync"),
+    ]);
+    expect(ctx.artifacts.map((a) => a.id)).toEqual(["agents"]);
+  });
+
+  it("lifecycle step keeps every artifact when all participate in the workflow", async () => {
+    const ctx = await runSteps([
+      async (c) => {
+        c.artifacts = [
+          createArtifact({
+            id: "a",
+            source: { path: "a.md" },
+            destination: { path: "a.md" },
+            mergeStrategy: "overwrite",
+            lifecycle: ["init", "sync"],
+          }),
+        ];
+      },
+      lifecycleStep("init"),
+    ]);
+    expect(ctx.artifacts).toHaveLength(1);
+  });
+
   it("resolveVariables step throws without an analysis", async () => {
     await expect(runSteps([resolveVariablesStep()])).rejects.toThrow(/analysis/);
   });
@@ -143,6 +194,7 @@ describe("pipeline steps", () => {
       source: { path: "artifacts/AGENTS.md" },
       destination: { path: "AGENTS.md" },
       mergeStrategy: "managed-blocks",
+      lifecycle: ["init", "sync"],
     });
     const ctx = await runSteps(
       [
@@ -164,6 +216,7 @@ describe("pipeline steps", () => {
       source: { path: "artifacts/AGENTS.md" },
       destination: { path: "AGENTS.md" },
       mergeStrategy: "managed-blocks",
+      lifecycle: ["init", "sync"],
     });
     const ctx = await runSteps(
       [
@@ -195,6 +248,7 @@ describe("pipeline steps", () => {
       source: { path: "artifacts/AGENTS.md" },
       destination: { path: "AGENTS.md" },
       mergeStrategy: "managed-blocks",
+      lifecycle: ["init", "sync"],
     });
     const rendered = ["<!-- DOOZCTL:BEGIN:v1 repo -->", "new", "<!-- DOOZCTL:END:v1 repo -->"].join(
       "\n",
@@ -231,6 +285,7 @@ describe("pipeline steps", () => {
       source: { path: "a.md" },
       destination: { path: "a.md" },
       mergeStrategy: "managed-blocks",
+      lifecycle: ["init", "sync"],
     });
     await runSteps([
       async (c) => {
@@ -253,6 +308,7 @@ describe("pipeline steps", () => {
       source: { path: "a.md" },
       destination: { path: "a.md" },
       mergeStrategy: "managed-blocks",
+      lifecycle: ["init", "sync"],
       schema: "schemas/a.json",
     });
     await runSteps([
@@ -271,6 +327,7 @@ describe("pipeline steps", () => {
       source: { path: "artifacts/AGENTS.md" },
       destination: { path: "docs/AGENTS.md" },
       mergeStrategy: "managed-blocks",
+      lifecycle: ["init", "sync"],
     });
     await runSteps(
       [
@@ -289,6 +346,37 @@ describe("pipeline steps", () => {
     await expect(
       readFile(path.join(repo, ".ai/repository-analysis.json"), "utf-8"),
     ).resolves.toContain('"root"');
+  });
+
+  it("write step preserves artifact ids recorded by other workflows in the manifest", async () => {
+    const repo = await tmp();
+    await mkdir(path.join(repo, ".dooz"), { recursive: true });
+    await writeFile(
+      path.join(repo, ".dooz", "manifest.json"),
+      JSON.stringify({ version: 1, artifacts: ["gitignore"] }),
+      "utf-8",
+    );
+    const artifact = createArtifact({
+      id: "agents",
+      source: { path: "artifacts/AGENTS.md" },
+      destination: { path: "docs/AGENTS.md" },
+      mergeStrategy: "managed-blocks",
+      lifecycle: ["sync"],
+    });
+    await runSteps(
+      [
+        async (c) => {
+          c.merged = [{ artifact, content: "rendered" }];
+          c.analysis = minimalAnalysis(repo);
+        },
+        writeStep({ store: new RepositoryStore() }),
+      ],
+      { root: repo },
+    );
+    const manifest = JSON.parse(
+      await readFile(path.join(repo, ".dooz", "manifest.json"), "utf-8"),
+    ) as { artifacts: string[] };
+    expect(manifest.artifacts).toEqual(["gitignore", "agents"]);
   });
 
   it("saveAnalysis step persists the analysis", async () => {

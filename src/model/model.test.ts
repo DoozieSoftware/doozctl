@@ -4,7 +4,7 @@ import type { Manifest, Session, StandardsPackage } from "./model.js";
 describe("model", () => {
   it("models a standards package manifest", () => {
     const pkg: StandardsPackage = {
-      format: 1,
+      format: 2,
       name: "@dooziesoft/standards",
       version: "1.0.0",
       engine: ">=1.0.0",

@@ -83,7 +83,7 @@ The engine loads a package only through its manifest. It never scans directories
 
 ```json
 {
-  "format": 1,
+  "format": 2,
   "name": "@dooziesoft/standards",
   "version": "1.0.0",
   "engine": ">=1.0.0",
@@ -92,13 +92,14 @@ The engine loads a package only through its manifest. It never scans directories
       "id": "agents",
       "source": "artifacts/AGENTS.md",
       "destination": "AGENTS.md",
-      "merge": "managed-blocks"
+      "merge": "managed-blocks",
+      "lifecycle": ["init", "sync"]
     }
   ]
 }
 ```
 
-* `format` — package structure version, used by the loader. Unsupported formats are rejected.
+* `format` — package structure version, used by the loader. Unsupported formats are rejected. Format 2 introduces the artifact lifecycle.
 * `name` — package name.
 * `version` — version of the standards package itself.
 * `engine` — required engine version range. Metadata only; not enforced.
@@ -121,6 +122,7 @@ The loader validates only:
 * JSON is valid
 * artifact source file exists
 * merge strategy is valid
+* artifact lifecycle is valid (required, non-empty, values from `init`, `sync`, `summarize`)
 
 Nothing else.
 
@@ -150,7 +152,8 @@ An artifact declaration in the manifest is minimal metadata:
   "id": "agents",
   "source": "artifacts/AGENTS.md",
   "destination": "AGENTS.md",
-  "merge": "managed-blocks"
+  "merge": "managed-blocks",
+  "lifecycle": ["init", "sync"]
 }
 ```
 
@@ -158,8 +161,23 @@ An artifact declaration in the manifest is minimal metadata:
 * `source` — path to the artifact file inside the package.
 * `destination` — path inside the repository.
 * `merge` — merge strategy.
+* `lifecycle` — the workflows that process this artifact.
 
 Declarations carry no templates, variables, or conditions.
+
+## Lifecycle
+
+An artifact participates only in the workflows its `lifecycle` names:
+
+| Workflow     | Processes artifacts with lifecycle |
+| ------------ | ---------------------------------- |
+| `init`       | `init`                             |
+| `sync`       | `sync`                             |
+| `summarize`  | `summarize`                        |
+
+Artifacts outside a workflow's lifecycle are invisible to it: they are not loaded, rendered, merged or written by that workflow, and are skipped with a report. Merge describes how content combines; lifecycle describes when.
+
+This keeps `sync` unconditionally idempotent: append-only session artifacts declare `["summarize"]`, so neither `init` nor `sync` ever executes `append`.
 
 ## Artifact
 
@@ -168,6 +186,7 @@ Every artifact has:
 * source
 * destination
 * merge strategy
+* lifecycle
 * optional schema
 
 The engine treats every artifact identically.
@@ -355,7 +374,7 @@ Append the rendered artifact to the existing content.
 
 Never modify previous content.
 
-Used for immutable session files.
+Used for immutable session files. Append artifacts declare lifecycle `["summarize"]`; `init` and `sync` never execute `append`.
 
 Example:
 
@@ -452,9 +471,11 @@ Read-only.
 
 ## sync
 
-Re-render all managed artifacts.
+Re-render the artifacts in the sync lifecycle.
 
 Preserve developer content.
+
+Skip artifacts outside the sync lifecycle and report them.
 
 ---
 
@@ -567,6 +588,7 @@ It must never:
 
 * Managed artifacts updated.
 * Developer content preserved.
+* Out-of-lifecycle artifacts skipped and reported.
 
 ---
 

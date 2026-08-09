@@ -30,7 +30,7 @@ async function writePackage(pkg: string): Promise<void> {
   await writeFile(
     path.join(pkg, "package.json"),
     JSON.stringify({
-      format: 1,
+      format: 2,
       name: "@dooziesoft/standards",
       version: "1.0.0",
       engine: ">=1.0.0",
@@ -40,6 +40,7 @@ async function writePackage(pkg: string): Promise<void> {
           source: "artifacts/AGENTS.md",
           destination: "AGENTS.md",
           merge: "managed-blocks",
+          lifecycle: ["init", "sync"],
         },
       ],
     }),
@@ -89,7 +90,7 @@ function spyEngine() {
 }
 
 describe("App", () => {
-  it("routes init through the full seven-stage pipeline and prints a report", async () => {
+  it("routes init through the full pipeline and prints a report", async () => {
     const { engine, calls } = spyEngine();
     const { deps, printed } = buildDeps();
     const app = new App(engine, deps);
@@ -100,6 +101,7 @@ describe("App", () => {
     expect(calls[0]?.steps).toEqual([
       "analyzeStep",
       "loadStep",
+      "lifecycleStep",
       "resolveVariablesStep",
       "renderStep",
       "mergeStep",
@@ -140,11 +142,20 @@ describe("App", () => {
     expect(executed).toEqual([
       ["analyzeStep", "saveAnalysisStep"],
       ["validateStep", "reportStep"],
-      ["resolveVariablesStep", "renderStep", "mergeStep", "validateStep", "writeStep"],
+      [
+        "loadStep",
+        "lifecycleStep",
+        "resolveVariablesStep",
+        "renderStep",
+        "mergeStep",
+        "validateStep",
+        "writeStep",
+      ],
       ["analyzeStep", "reportStep"],
       [
         "loadStateStep",
         "loadStep",
+        "lifecycleStep",
         "resolveVariablesStep",
         "renderStep",
         "mergeStep",

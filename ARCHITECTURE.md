@@ -88,7 +88,7 @@ The manifest is the only entry point:
 
 ```json
 {
-  "format": 1,
+  "format": 2,
   "name": "@dooziesoft/standards",
   "version": "1.0.0",
   "engine": ">=1.0.0",
@@ -97,13 +97,18 @@ The manifest is the only entry point:
       "id": "agents",
       "source": "artifacts/AGENTS.md",
       "destination": "AGENTS.md",
-      "merge": "managed-blocks"
+      "merge": "managed-blocks",
+      "lifecycle": ["init", "sync"]
     }
   ]
 }
 ```
 
-The loader validates only: package exists, JSON valid, artifact source exists, merge strategy valid. Nothing else.
+The loader validates only: package exists, JSON valid, artifact source exists, merge strategy valid, lifecycle valid (required, non-empty, values from `init`/`sync`/`summarize`). Nothing else.
+
+## Lifecycle
+
+Each artifact declares the workflows that process it. `init` processes `init`-lifecycle artifacts, `sync` processes `sync`-lifecycle artifacts, `summarize` processes `summarize`-lifecycle artifacts. Artifacts outside a workflow's lifecycle are skipped and reported, never processed — so `append` session artifacts (`["summarize"]`) are untouched by `init` and `sync`, making `sync` unconditionally idempotent.
 
 Package format features deliberately absent: inheritance, includes, imports, conditions, loops, plugin hooks, code, YAML/TOML/custom template syntax.
 
@@ -116,7 +121,7 @@ Four strategies, frozen:
 | Strategy            | Behavior                                                         | Use                                             |
 | ------------------- | ---------------------------------------------------------------- | ----------------------------------------------- |
 | `overwrite`         | Replace entirely                                                 | generated machine state (`.dooz/manifest.json`) |
-| `append`            | Add after, never modify                                          | immutable session files                         |
+| `append`            | Add after, never modify                                          | immutable session files (summarize lifecycle)   |
 | `replace-generated` | Replace only if the file carries the generated marker, else fail | wrapper files                                   |
 | `managed-blocks`    | Replace only inside marked regions, preserve everything else     | developer-facing files                          |
 

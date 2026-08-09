@@ -61,10 +61,11 @@ export class App {
   }
 
   /**
-   * sync: re-render all managed artifacts from the persisted repository state,
-   * preserving developer content, and print a summary. Never partially
-   * synchronizes — the pipeline short-circuits before writing if any merge
-   * fails, leaving the repository unchanged.
+   * sync: re-render the managed artifacts in the sync lifecycle from the
+   * persisted repository state, preserving developer content, and print a
+   * summary. Artifacts outside the sync lifecycle are skipped and reported.
+   * Never partially synchronizes — the pipeline short-circuits before writing
+   * if any merge fails, leaving the repository unchanged.
    */
   async sync(args: string[]): Promise<number> {
     if (args.length < 2) {
@@ -77,13 +78,20 @@ export class App {
     this.deps.print("");
 
     const pkg = await this.deps.loader.load(standardsDir);
-    const destinations = pkg.artifacts.map((artifact) => artifact.destination.path);
+    const active = pkg.artifacts.filter((artifact) => artifact.lifecycle.includes("sync"));
+    const skipped = pkg.artifacts.length - active.length;
+    const destinations = active.map((artifact) => artifact.destination.path);
     const before = await this.snapshotDestinations(root, destinations);
 
     await this.run(syncPipeline(this.deps), args);
 
     const after = await this.snapshotDestinations(root, destinations);
     const updated = destinations.filter((dest) => before.get(dest) !== after.get(dest)).length;
+
+    if (skipped > 0) {
+      this.deps.print(`✓ Skipped ${skipped} artifacts (not in sync lifecycle)`);
+      this.deps.print("");
+    }
 
     if (updated === 0) {
       this.deps.print("✓ Repository already up to date.");
@@ -124,11 +132,14 @@ export class App {
     return 0;
   }
 
-  /** The declared artifact destinations, sorted, for the init report. */
+  /** The declared init-lifecycle destinations, sorted, for the init report. */
   private async declaredDestinations(standardsDir: string): Promise<string[]> {
     try {
       const pkg = await this.deps.loader.load(standardsDir);
-      return pkg.artifacts.map((artifact) => artifact.destination.path).sort();
+      return pkg.artifacts
+        .filter((artifact) => artifact.lifecycle.includes("init"))
+        .map((artifact) => artifact.destination.path)
+        .sort();
     } catch {
       return [];
     }

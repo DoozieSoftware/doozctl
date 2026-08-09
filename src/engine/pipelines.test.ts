@@ -27,9 +27,13 @@ const deps = {
 } as AnalyzeDeps & LoadDeps & MergeDeps & ValidateDeps & WriteDeps & SaveAnalysisDeps;
 
 describe("command pipelines", () => {
-  it("init runs the full seven-stage pipeline", () => {
+  it("init runs the full eight-stage pipeline", () => {
     const steps = initPipeline(deps);
-    expect(steps).toHaveLength(7);
+    expect(steps).toHaveLength(8);
+  });
+
+  it("init filters artifacts to the init lifecycle", () => {
+    expect(initPipeline(deps).map(fnOf)).toContain("lifecycleStep");
   });
 
   it("analyze is read-only and never writes", () => {
@@ -43,6 +47,7 @@ describe("command pipelines", () => {
     expect(steps.map(fnOf)).not.toContain("analyzeStep");
     expect(steps.map(fnOf)).toContain("mergeStep");
     expect(steps.map(fnOf)).toContain("writeStep");
+    expect(steps.map(fnOf)).toContain("lifecycleStep");
   });
 
   it("doctor is validate + report and never writes", () => {
@@ -55,10 +60,11 @@ describe("command pipelines", () => {
     expect(steps.map(fnOf)).not.toContain("writeStep");
   });
 
-  it("summarize appends a session", () => {
+  it("summarize appends a session and filters to the summarize lifecycle", () => {
     const steps = summarizePipeline(deps);
     expect(steps.map(fnOf)).toContain("writeStep");
     expect(steps.map(fnOf)).toContain("mergeStep");
+    expect(steps.map(fnOf)).toContain("lifecycleStep");
   });
 });
 

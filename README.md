@@ -73,7 +73,7 @@ Example — initialize the current directory against a local standards package:
 doozctl init . ./standards
 ```
 
-On success, `init` analyzes the repository, renders each artifact the package declares (for example `AGENTS.md`), merges it into existing files without touching unmanaged content, and writes the engine state:
+On success, `init` analyzes the repository, renders each init-lifecycle artifact the package declares (for example `AGENTS.md`), merges it into existing files without touching unmanaged content, and writes the engine state:
 
 ```text
 Repository initialized: .
