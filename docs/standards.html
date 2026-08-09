@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Standards Packages · DoozCTL</title>
+    <link rel="stylesheet" href="assets/site.css" />
+  </head>
+  <body>
+    <nav>
+      <div class="wrap">
+        <a class="brand" href="index.html">doozctl</a>
+        <div class="links">
+          <a href="commands.html">Commands</a>
+          <a href="architecture.html">Architecture</a>
+          <a href="standards.html">Standards</a>
+          <a href="philosophy.html">Philosophy</a>
+        </div>
+      </div>
+    </nav>
+
+    <main>
+      <h1>Standards Packages</h1>
+      <p class="lede">
+        A Standards Package is a plain directory. No packaging format, registry, or plugin system.
+      </p>
+
+      <pre><code>standards/
+    package.json
+    artifacts/
+    schemas/</code></pre>
+
+      <p>The manifest is the only entry point. It declares the artifacts the engine renders:</p>
+
+      <pre><code>{
+  "format": 2,
+  "name": "@dooziesoft/standards",
+  "version": "1.0.0",
+  "engine": "&gt;=1.0.0",
+  "artifacts": [
+    {
+      "id": "agents",
+      "source": "artifacts/AGENTS.md",
+      "destination": "AGENTS.md",
+      "merge": "managed-blocks",
+      "lifecycle": ["init", "sync"]
+    }
+  ]
+}</code></pre>
+
+      <h2>Merge strategies</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Strategy</th>
+            <th>Behavior</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>overwrite</code></td>
+            <td>Replace entirely</td>
+          </tr>
+          <tr>
+            <td><code>append</code></td>
+            <td>Add after, never modify</td>
+          </tr>
+          <tr>
+            <td><code>replace-generated</code></td>
+            <td>Replace only if the file carries the generated marker</td>
+          </tr>
+          <tr>
+            <td><code>managed-blocks</code></td>
+            <td>Replace only inside marked regions, preserve everything else</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>
+        The engine never invents behavior. All domain behavior lives in the package, never in the
+        engine. See
+        <a href="https://github.com/dooziesoft/doozctl/blob/main/spec.md">spec.md</a> for the full
+        frozen contract, and
+        <a href="https://github.com/dooziesoft/doozctl/tree/main/examples/standards"
+          >examples/standards</a
+        >
+        for a copyable package.
+      </p>
+    </main>
+
+    <footer>
+      <span>© 2026 DoozieSoft</span>
+      <span>
+        <a href="https://github.com/dooziesoft/doozctl">GitHub</a>
+        ·
+        <a href="commands.html">Commands</a>
+        ·
+        <a href="architecture.html">Architecture</a>
+      </span>
+    </footer>
+  </body>
+</html>

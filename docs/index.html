@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="DoozCTL — a repository standards engine. Persistent, deterministic repository memory for every AI assistant."
+    />
+    <title>DoozCTL · Repository Standards Engine</title>
+    <link rel="stylesheet" href="assets/site.css" />
+  </head>
+  <body>
+    <nav>
+      <div class="wrap">
+        <a class="brand" href="index.html">doozctl</a>
+        <div class="links">
+          <a href="commands.html">Commands</a>
+          <a href="architecture.html">Architecture</a>
+          <a href="standards.html">Standards</a>
+          <a href="philosophy.html">Philosophy</a>
+        </div>
+      </div>
+    </nav>
+
+    <main>
+      <h1>Repository Standards Engine</h1>
+      <p class="lede">AI coding tools lose context. Repositories shouldn&rsquo;t.</p>
+      <p>
+        DoozCTL turns repository knowledge into persistent, deterministic artifacts that every AI
+        assistant can share — Claude, Codex, Cursor, Gemini, OpenCode, and future tools. The
+        repository becomes the long-term memory. Assistants become interchangeable engines.
+      </p>
+
+      <div class="install">
+        <pre><code>npm install -g @dooziesoft/doozctl</code></pre>
+        <div class="cta">
+          <a class="btn" href="commands.html">Get started</a>
+          <a class="btn secondary" href="https://github.com/dooziesoft/doozctl">GitHub</a>
+        </div>
+      </div>
+
+      <h2>Install</h2>
+      <p>Requires Node.js 20 or newer.</p>
+      <pre><code>npm install -g @dooziesoft/doozctl</code></pre>
+
+      <h2>Initialize</h2>
+      <p>Analyze a repository and render the artifacts a Standards Package declares.</p>
+      <pre><code>doozctl init . ./standards</code></pre>
+
+      <h2>Synchronize</h2>
+      <p>Re-render managed artifacts while preserving everything you wrote by hand.</p>
+      <pre><code>doozctl sync . ./standards</code></pre>
+
+      <h2>Capture a session</h2>
+      <p>Append an immutable session summary and rewrite the current context.</p>
+      <pre><code>doozctl summarize . ./standards .ai/pending.md</code></pre>
+
+      <h2>Diagnose</h2>
+      <p>Verify the repository is initialized and healthy.</p>
+      <pre><code>doozctl doctor . ./standards</code></pre>
+
+      <h2>Status</h2>
+      <p>See what DoozCTL understands about the repository.</p>
+      <pre><code>doozctl status .</code></pre>
+    </main>
+
+    <footer>
+      <span>© 2026 DoozieSoft</span>
+      <span>
+        <a href="https://github.com/dooziesoft/doozctl">GitHub</a>
+        ·
+        <a href="architecture.html">Documentation</a>
+        ·
+        <a href="standards.html">Standards</a>
+        ·
+        <a href="https://github.com/dooziesoft/doozctl/blob/main/ROADMAP.md">Roadmap</a>
+      </span>
+    </footer>
+  </body>
+</html>

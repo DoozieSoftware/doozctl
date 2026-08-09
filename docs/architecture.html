@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Architecture · DoozCTL</title>
+    <link rel="stylesheet" href="assets/site.css" />
+  </head>
+  <body>
+    <nav>
+      <div class="wrap">
+        <a class="brand" href="index.html">doozctl</a>
+        <div class="links">
+          <a href="commands.html">Commands</a>
+          <a href="architecture.html">Architecture</a>
+          <a href="standards.html">Standards</a>
+          <a href="philosophy.html">Philosophy</a>
+        </div>
+      </div>
+    </nav>
+
+    <main>
+      <h1>Architecture</h1>
+      <p class="lede">
+        Every command runs the same pipeline as a sequence of independent steps, in order,
+        short-circuiting on the first failure.
+      </p>
+
+      <div class="pipeline">
+        <div class="stage">Repository</div>
+        <div class="arrow">↓</div>
+        <div class="stage">Analyze</div>
+        <div class="arrow">↓</div>
+        <div class="stage">Load Standards</div>
+        <div class="arrow">↓</div>
+        <div class="stage">Resolve Variables</div>
+        <div class="arrow">↓</div>
+        <div class="stage">Render</div>
+        <div class="arrow">↓</div>
+        <div class="stage">Merge</div>
+        <div class="arrow">↓</div>
+        <div class="stage">Validate</div>
+        <div class="arrow">↓</div>
+        <div class="stage">Persist</div>
+      </div>
+
+      <h2>Layers</h2>
+      <p>
+        The CLI is thin: commander only parses arguments. A dispatcher routes each command to an
+        application service, which selects its own pipeline. Read-only commands never reach write.
+        Infrastructure enters through constructor injection — no DI container.
+      </p>
+
+      <h2>Three products</h2>
+      <p>DoozCTL is really three things:</p>
+      <ul>
+        <li><strong>The engine</strong> — analyze, render, merge, sync. Nothing else.</li>
+        <li>
+          <strong>Standards Packages</strong> — versioned packages that define repository artifacts.
+        </li>
+        <li><strong>Repository memory</strong> — the portable <code>.ai/</code> convention.</li>
+      </ul>
+
+      <h2>Repository memory</h2>
+      <pre><code>.ai/
+    current-context.md        AI-readable memory
+    repository-analysis.json  factual repository metadata
+    sessions/                 immutable session summaries</code></pre>
+
+      <p>
+        See
+        <a href="https://github.com/dooziesoft/doozctl/blob/main/ARCHITECTURE.md"
+          >ARCHITECTURE.md</a
+        >
+        for the full design.
+      </p>
+    </main>
+
+    <footer>
+      <span>© 2026 DoozieSoft</span>
+      <span>
+        <a href="https://github.com/dooziesoft/doozctl">GitHub</a>
+        ·
+        <a href="commands.html">Commands</a>
+        ·
+        <a href="philosophy.html">Philosophy</a>
+      </span>
+    </footer>
+  </body>
+</html>

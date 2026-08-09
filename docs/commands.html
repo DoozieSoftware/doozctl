@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Commands · DoozCTL</title>
+    <link rel="stylesheet" href="assets/site.css" />
+  </head>
+  <body>
+    <nav>
+      <div class="wrap">
+        <a class="brand" href="index.html">doozctl</a>
+        <div class="links">
+          <a href="commands.html">Commands</a>
+          <a href="architecture.html">Architecture</a>
+          <a href="standards.html">Standards</a>
+          <a href="philosophy.html">Philosophy</a>
+        </div>
+      </div>
+    </nav>
+
+    <main>
+      <h1>Commands</h1>
+      <p class="lede">Six commands. Every command supports <code>--help</code>.</p>
+
+      <div class="command">
+        <div class="name">doozctl init &lt;repo&gt; &lt;package&gt;</div>
+        <p>Analyze the repository, render the init-lifecycle artifacts, and write engine state.</p>
+      </div>
+      <div class="command">
+        <div class="name">doozctl sync &lt;repo&gt; &lt;package&gt;</div>
+        <p>Re-render managed artifacts from persisted repository state, preserving your edits.</p>
+      </div>
+      <div class="command">
+        <div class="name">doozctl analyze [repo]</div>
+        <p>Update the repository analysis only. Read-only.</p>
+      </div>
+      <div class="command">
+        <div class="name">doozctl summarize &lt;repo&gt; &lt;package&gt; &lt;session-file&gt;</div>
+        <p>Append an immutable session summary and rewrite the current context.</p>
+      </div>
+      <div class="command">
+        <div class="name">doozctl doctor &lt;repo&gt; &lt;package&gt;</div>
+        <p>Verify the repository is initialized, the package loads, and artifacts are recorded.</p>
+      </div>
+      <div class="command">
+        <div class="name">doozctl status [repo]</div>
+        <p>Show what DoozCTL understands about the repository. Read-only.</p>
+      </div>
+
+      <h2>Exit codes</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Meaning</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>0</code></td>
+            <td>Success</td>
+          </tr>
+          <tr>
+            <td><code>1</code></td>
+            <td>Error (missing arguments, uninitialized repository, malformed state)</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Session flags</h2>
+      <p><code>summarize</code> accepts optional metadata flags:</p>
+      <pre><code>doozctl summarize . ./standards .ai/pending.md \
+  --tool claude --model opus --user akshay</code></pre>
+    </main>
+
+    <footer>
+      <span>© 2026 DoozieSoft</span>
+      <span>
+        <a href="https://github.com/dooziesoft/doozctl">GitHub</a>
+        ·
+        <a href="index.html">Home</a>
+        ·
+        <a href="standards.html">Standards</a>
+      </span>
+    </footer>
+  </body>
+</html>
