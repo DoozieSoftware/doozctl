@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import path from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -26,11 +27,9 @@ export class GitService {
     if (rootOut === null) {
       return null;
     }
-    // Use git's raw output directly. git always returns an absolute path, and on
-    // Windows it is the 8.3 short form (e.g. RUNNER~1), which matches what the
-    // tests compare against via realpathSync(dir). Normalizing/expanding here
-    // would produce a long path and break that comparison.
-    const root = rootOut;
+    // Canonicalize the path (resolves separators and any 8.3 short names on
+    // Windows) so the reported root is a stable, long form on every platform.
+    const root = path.resolve(rootOut);
     const branchOut = await this.git(root, ["rev-parse", "--abbrev-ref", "HEAD"]);
     const branch = branchOut !== null && branchOut !== "HEAD" ? branchOut : null;
     const status = await this.git(root, ["status", "--porcelain"]);

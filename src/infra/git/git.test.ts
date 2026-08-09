@@ -10,6 +10,22 @@ import { GitService } from "./git.js";
  * repositories. Requires the git binary; offline and deterministic.
  */
 
+/**
+ * Two paths point at the same directory even when their string forms differ
+ * (Windows 8.3 short names, `/var` vs `/private/var` symlinks, separator or
+ * case differences). Accept equality under realpath or under a resolved,
+ * case-insensitive, forward-slash comparison.
+ */
+function sameDirectory(a: string, b: string): boolean {
+  try {
+    if (realpathSync(a) === realpathSync(b)) return true;
+  } catch {
+    // fall through to the resolved comparison below
+  }
+  const norm = (p: string): string => path.resolve(p).toLowerCase().replace(/\\/g, "/");
+  return norm(a) === norm(b);
+}
+
 /** Create a fresh git repository in a temp dir, returning its path. */
 function makeRepo(init: (dir: string) => void = () => {}): string {
   const dir = mkdtempSync(path.join(tmpdir(), "doozctl-git-"));
@@ -47,7 +63,7 @@ describe("GitService", () => {
     tempDirs.push(dir);
     const info = await new GitService().detect(dir);
     expect(info).not.toBeNull();
-    expect(info?.root).toBe(realpathSync(dir));
+    expect(sameDirectory(info?.root ?? "", dir)).toBe(true);
     expect(info?.branch).toBe("main");
     expect(info?.dirty).toBe(false);
     cleanup();
@@ -59,7 +75,7 @@ describe("GitService", () => {
     const nested = path.join(dir, "packages", "app");
     execFileSync("mkdir", ["-p", nested], { cwd: dir });
     const info = await new GitService().detect(nested);
-    expect(info?.root).toBe(realpathSync(dir));
+    expect(sameDirectory(info?.root ?? "", dir)).toBe(true);
     expect(info?.branch).toBe("main");
     cleanup();
   });

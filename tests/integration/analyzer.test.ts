@@ -11,6 +11,22 @@ import { GitService } from "../../src/infra/git/git.js";
  * real git detection. Requires the git binary; offline and deterministic.
  */
 
+/**
+ * Two paths point at the same directory even when their string forms differ
+ * (Windows 8.3 short names, `/var` vs `/private/var` symlinks, separator or
+ * case differences). Accept equality under realpath or under a resolved,
+ * case-insensitive, forward-slash comparison.
+ */
+function sameDirectory(a: string, b: string): boolean {
+  try {
+    if (realpathSync(a) === realpathSync(b)) return true;
+  } catch {
+    // fall through to the resolved comparison below
+  }
+  const norm = (p: string): string => path.resolve(p).toLowerCase().replace(/\\/g, "/");
+  return norm(a) === norm(b);
+}
+
 const tempDirs: string[] = [];
 function cleanup(): void {
   for (const dir of tempDirs.splice(0)) {
@@ -42,7 +58,7 @@ describe("RepositoryAnalyzer (integration)", () => {
     const dir = makeRepo();
     const analysis = await new RepositoryAnalyzer({ git: new GitService() }).analyze(dir);
     expect(analysis.git).toEqual({ isRepository: true, branch: "main", dirty: false });
-    expect(analysis.root).toBe(realpathSync(dir));
+    expect(sameDirectory(analysis.root, dir)).toBe(true);
     cleanup();
   });
 
