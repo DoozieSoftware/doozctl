@@ -3,9 +3,11 @@
 This repository is managed by DoozCTL.
 
 <!-- DOOZCTL:BEGIN:v1 repository -->
+
 - Languages: {{analysis.language}}
 - Framework: {{analysis.framework}}
 - Tests: {{analysis.tests}}
+
 <!-- DOOZCTL:END:v1 repository -->
 
 ## Conventions

@@ -4,6 +4,24 @@
   "description": "A repository standards engine: turns repository knowledge into persistent, deterministic artifacts every AI assistant can share.",
   "type": "module",
   "license": "MIT",
+  "keywords": [
+    "ai",
+    "agents",
+    "cli",
+    "repository",
+    "standards",
+    "memory",
+    "codex",
+    "claude"
+  ],
+  "homepage": "https://ctl.dooziesoft.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dooziesoft/doozctl.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dooziesoft/doozctl/issues"
+  },
   "engines": {
     "node": ">=20"
   },
@@ -20,6 +38,7 @@
     "build": "tsup",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
+    "prepublishOnly": "pnpm typecheck && pnpm test && pnpm build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

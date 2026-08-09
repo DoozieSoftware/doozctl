@@ -72,9 +72,7 @@ export function buildDoctorReport(ctx: ExecutionContext, manifest: Manifest | nu
   lines.push(check(true, "Repository memory — .ai/repository-analysis.json"));
 
   if (ctx.standards !== null) {
-    lines.push(
-      check(true, `Standards package — ${ctx.standards.name} ${ctx.standards.version}`),
-    );
+    lines.push(check(true, `Standards package — ${ctx.standards.name} ${ctx.standards.version}`));
   }
 
   const declared = ctx.artifacts.map((artifact) => artifact.id);
@@ -89,7 +87,10 @@ export function buildDoctorReport(ctx: ExecutionContext, manifest: Manifest | nu
       `Artifacts not recorded in the manifest: ${missing.join(", ")}. Run doozctl init to repair.`,
     );
     lines.push(
-      check(false, `Generated artifacts recorded — ${recorded.size} of ${declared.length} in manifest`),
+      check(
+        false,
+        `Generated artifacts recorded — ${recorded.size} of ${declared.length} in manifest`,
+      ),
     );
   }
 

@@ -7,9 +7,11 @@
 - Never run the migration on Fridays.
 
 <!-- DOOZCTL:BEGIN:v1 repository -->
+
 - Languages: JavaScript
 - Build system: npm
 - Package manager: npm
+
 <!-- DOOZCTL:END:v1 repository -->
 
 ## Conventions

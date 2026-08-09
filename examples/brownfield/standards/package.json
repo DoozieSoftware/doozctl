@@ -9,7 +9,10 @@
       "source": "artifacts/AGENTS.md",
       "destination": "AGENTS.md",
       "merge": "managed-blocks",
-      "lifecycle": ["init", "sync"]
+      "lifecycle": [
+        "init",
+        "sync"
+      ]
     }
   ]
 }

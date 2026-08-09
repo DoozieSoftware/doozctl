@@ -101,9 +101,9 @@ Every command supports `--help` with usage and an example.
 
 ## Exit codes
 
-| Code | Meaning |
-|------|---------|
-| `0`  | Success |
+| Code | Meaning                                                                    |
+| ---- | -------------------------------------------------------------------------- |
+| `0`  | Success                                                                    |
 | `1`  | Error (missing arguments, uninitialized repository, malformed state, etc.) |
 
 ## Design

@@ -561,13 +561,15 @@ describe("pipeline steps", () => {
           engine: ">=1.0.0",
           artifacts: [],
         };
-        c.artifacts = [createArtifact({
-          id: "agents",
-          source: { path: "a.md" },
-          destination: { path: "AGENTS.md" },
-          mergeStrategy: "managed-blocks",
-          lifecycle: ["init", "sync"],
-        })];
+        c.artifacts = [
+          createArtifact({
+            id: "agents",
+            source: { path: "a.md" },
+            destination: { path: "AGENTS.md" },
+            mergeStrategy: "managed-blocks",
+            lifecycle: ["init", "sync"],
+          }),
+        ];
       },
       reportStep({ print: (m) => printed.push(m), store: new RepositoryStore() }, "doctor"),
     ]);
@@ -581,13 +583,15 @@ describe("pipeline steps", () => {
     await runSteps([
       async (c) => {
         c.manifest = { version: 1, artifacts: [] };
-        c.artifacts = [createArtifact({
-          id: "agents",
-          source: { path: "a.md" },
-          destination: { path: "AGENTS.md" },
-          mergeStrategy: "managed-blocks",
-          lifecycle: ["init", "sync"],
-        })];
+        c.artifacts = [
+          createArtifact({
+            id: "agents",
+            source: { path: "a.md" },
+            destination: { path: "AGENTS.md" },
+            mergeStrategy: "managed-blocks",
+            lifecycle: ["init", "sync"],
+          }),
+        ];
       },
       reportStep({ print: (m) => printed.push(m), store: new RepositoryStore() }, "doctor"),
     ]);

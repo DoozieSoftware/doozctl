@@ -5,13 +5,13 @@ summarize lifecycle. Start here when authoring your own package.
 
 ## Artifacts
 
-| Artifact | Strategy | Lifecycle | Behavior |
-|----------|----------|-----------|----------|
-| `AGENTS.md` | `managed-blocks` | init, sync | Rewrites only the marked blocks; your notes outside survive. |
-| `MEMORY.md` | `managed-blocks` | init, sync | Same, a second example. |
-| `.gitignore` | `overwrite` | init | Replaced wholesale on init. |
-| `.ai/current-context.md` | `overwrite` | summarize | Rewritten every summarize from the session. |
-| `.ai/sessions/{{session.id}}.md` | `append` | summarize | One immutable file per session; never overwritten. |
+| Artifact                         | Strategy         | Lifecycle  | Behavior                                                     |
+| -------------------------------- | ---------------- | ---------- | ------------------------------------------------------------ |
+| `AGENTS.md`                      | `managed-blocks` | init, sync | Rewrites only the marked blocks; your notes outside survive. |
+| `MEMORY.md`                      | `managed-blocks` | init, sync | Same, a second example.                                      |
+| `.gitignore`                     | `overwrite`      | init       | Replaced wholesale on init.                                  |
+| `.ai/current-context.md`         | `overwrite`      | summarize  | Rewritten every summarize from the session.                  |
+| `.ai/sessions/{{session.id}}.md` | `append`         | summarize  | One immutable file per session; never overwritten.           |
 
 ## Try it
 

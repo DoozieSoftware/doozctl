@@ -27,7 +27,14 @@ const deps = {
   validator: {},
   store: {},
   print: () => {},
-} as unknown as AnalyzeDeps & LoadDeps & LoadStateDeps & MergeDeps & ValidateDeps & WriteDeps & SaveAnalysisDeps & ReportDeps;
+} as unknown as AnalyzeDeps &
+  LoadDeps &
+  LoadStateDeps &
+  MergeDeps &
+  ValidateDeps &
+  WriteDeps &
+  SaveAnalysisDeps &
+  ReportDeps;
 
 describe("command pipelines", () => {
   it("init runs the full eight-stage pipeline", () => {

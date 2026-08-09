@@ -9,7 +9,10 @@
       "source": "artifacts/WRAPPER.md",
       "destination": "WRAPPER.md",
       "merge": "replace-generated",
-      "lifecycle": ["init", "sync"]
+      "lifecycle": [
+        "init",
+        "sync"
+      ]
     }
   ]
 }

@@ -9,35 +9,47 @@
       "source": "artifacts/AGENTS.md",
       "destination": "AGENTS.md",
       "merge": "managed-blocks",
-      "lifecycle": ["init", "sync"]
+      "lifecycle": [
+        "init",
+        "sync"
+      ]
     },
     {
       "id": "memory",
       "source": "artifacts/MEMORY.md",
       "destination": "MEMORY.md",
       "merge": "managed-blocks",
-      "lifecycle": ["init", "sync"]
+      "lifecycle": [
+        "init",
+        "sync"
+      ]
     },
     {
       "id": "gitignore",
       "source": "artifacts/gitignore",
       "destination": ".gitignore",
       "merge": "overwrite",
-      "lifecycle": ["init"]
+      "lifecycle": [
+        "init"
+      ]
     },
     {
       "id": "current-context",
       "source": "artifacts/current-context.md",
       "destination": ".ai/current-context.md",
       "merge": "overwrite",
-      "lifecycle": ["summarize"]
+      "lifecycle": [
+        "summarize"
+      ]
     },
     {
       "id": "session",
       "source": "artifacts/session.md",
       "destination": ".ai/sessions/{{session.id}}.md",
       "merge": "append",
-      "lifecycle": ["summarize"]
+      "lifecycle": [
+        "summarize"
+      ]
     }
   ]
 }
