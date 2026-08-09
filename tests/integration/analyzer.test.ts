@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -12,19 +12,13 @@ import { GitService } from "../../src/infra/git/git.js";
  */
 
 /**
- * Two paths point at the same directory even when their string forms differ
- * (Windows 8.3 short names, `/var` vs `/private/var` symlinks, separator or
- * case differences). Accept equality under realpath or under a resolved,
- * case-insensitive, forward-slash comparison.
+ * The repository root git itself reports for `dir`. Comparing the analyzer's
+ * reported root against git's own output (rather than the OS-provided temp
+ * path) avoids Windows 8.3 short-name mismatches and `/var` vs `/private/var`
+ * symlink differences, which cannot be reconciled by string normalization.
  */
-function sameDirectory(a: string, b: string): boolean {
-  try {
-    if (realpathSync(a) === realpathSync(b)) return true;
-  } catch {
-    // fall through to the resolved comparison below
-  }
-  const norm = (p: string): string => path.resolve(p).toLowerCase().replace(/\\/g, "/");
-  return norm(a) === norm(b);
+function gitRoot(dir: string): string {
+  return execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd: dir }).toString().trim();
 }
 
 const tempDirs: string[] = [];
@@ -58,7 +52,7 @@ describe("RepositoryAnalyzer (integration)", () => {
     const dir = makeRepo();
     const analysis = await new RepositoryAnalyzer({ git: new GitService() }).analyze(dir);
     expect(analysis.git).toEqual({ isRepository: true, branch: "main", dirty: false });
-    expect(sameDirectory(analysis.root, dir)).toBe(true);
+    expect(path.resolve(analysis.root)).toBe(path.resolve(gitRoot(dir)));
     cleanup();
   });
 
