@@ -64,7 +64,7 @@
 
 ## Stage G — Release Review
 
-- [ ] Independent product review (staff-engineer lens)
-- [ ] `v1.0.0-rc.1` tag
+- [x] Independent product review (staff-engineer lens) — found and fixed `analyze` writing into uninitialized repositories; all commands now error cleanly when uninitialized
+- [ ] `v1.0.0-rc.1` tag (waiting for approval)
 - [ ] External review
 - [ ] `v1.0.0`
