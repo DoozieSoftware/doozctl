@@ -81,9 +81,9 @@ Engine state:      .dooz/manifest.json
 Repository memory: .ai/repository-analysis.json
 ```
 
-A Standards Package is just a directory containing a `package.json` manifest that declares artifacts. See [spec.md](https://github.com/dooziesoft/doozctl/blob/main/spec.md) for the contract. Ready-to-run packages live in [examples/](https://github.com/dooziesoft/doozctl/tree/main/examples).
+A Standards Package is just a directory containing a `package.json` manifest that declares artifacts. See [spec.md](https://github.com/DoozieSoftware/doozctl/blob/main/spec.md) for the contract. Ready-to-run packages live in [examples/](https://github.com/DoozieSoftware/doozctl/tree/main/examples).
 
-See [FAQ.md](https://github.com/dooziesoft/doozctl/blob/main/FAQ.md) for common questions.
+See [FAQ.md](https://github.com/DoozieSoftware/doozctl/blob/main/FAQ.md) for common questions.
 
 ## Commands
 
@@ -111,7 +111,7 @@ Every command supports `--help` with usage and an example.
 - Prefer preserving user-authored content over propagating generated content.
 - Brownfield first — the engine merges into existing repositories, never destroys them.
 
-See [ARCHITECTURE.md](https://github.com/dooziesoft/doozctl/blob/main/ARCHITECTURE.md) for the layered design and [spec.md](https://github.com/dooziesoft/doozctl/blob/main/spec.md) for the frozen specification.
+See [ARCHITECTURE.md](https://github.com/DoozieSoftware/doozctl/blob/main/ARCHITECTURE.md) for the layered design and [spec.md](https://github.com/DoozieSoftware/doozctl/blob/main/spec.md) for the frozen specification.
 
 ## Status
 
@@ -124,8 +124,8 @@ All six workflows are implemented and tested (247 tests, 94.6% coverage):
 - ✅ doctor
 - ✅ status
 
-See [ROADMAP.md](https://github.com/dooziesoft/doozctl/blob/main/ROADMAP.md) for what is planned next and
-[RELEASE_CHECKLIST.md](https://github.com/dooziesoft/doozctl/blob/main/RELEASE_CHECKLIST.md) for the v1.0 release gate.
+See [ROADMAP.md](https://github.com/DoozieSoftware/doozctl/blob/main/ROADMAP.md) for what is planned next and
+[RELEASE_CHECKLIST.md](https://github.com/DoozieSoftware/doozctl/blob/main/RELEASE_CHECKLIST.md) for the v1.0 release gate.
 
 ## v1.0 definition
 

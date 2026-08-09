@@ -17,10 +17,10 @@
   "homepage": "https://ctl.dooziesoft.com",
   "repository": {
     "type": "git",
-    "url": "https://github.com/dooziesoft/doozctl.git"
+    "url": "https://github.com/DoozieSoftware/doozctl.git"
   },
   "bugs": {
-    "url": "https://github.com/dooziesoft/doozctl/issues"
+    "url": "https://github.com/DoozieSoftware/doozctl/issues"
   },
   "engines": {
     "node": ">=20"

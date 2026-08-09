@@ -65,6 +65,12 @@
 ## Stage G — Release Review
 
 - [x] Independent product review (staff-engineer lens) — found and fixed `analyze` writing into uninitialized repositories; all commands now error cleanly when uninitialized
-- [ ] `v1.0.0-rc.1` tag (waiting for approval)
+- [x] `v1.0.0-rc.1` tag created (local; awaiting push/approval)
 - [ ] External review
 - [ ] `v1.0.0`
+
+> GitHub repo: `DoozieSoftware/doozctl` (public). All docs/links repointed from
+> the inaccessible `dooziesoft` slug to `DoozieSoftware`. npm package scope
+> `@dooziesoft/doozctl` and the `ctl.dooziesoft.com` custom domain are unchanged.
+> Discussions could not be disabled via repo API (org-level control); harmless
+> for the RC.

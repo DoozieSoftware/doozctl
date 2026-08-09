@@ -68,5 +68,5 @@ byte-identical.
 ## How do I report a bug or request a feature?
 
 Open an issue on
-[GitHub](https://github.com/dooziesoft/doozctl/issues). For security issues,
+[GitHub](https://github.com/DoozieSoftware/doozctl/issues). For security issues,
 see [SECURITY.md](SECURITY.md).
