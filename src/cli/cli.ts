@@ -11,7 +11,7 @@ import { Dispatcher, ExitCode } from "../dispatcher/dispatcher.js";
  */
 
 /** Program metadata, overridable at build time. */
-export const VERSION = "0.3.0-alpha.1";
+export const VERSION = "1.0.0-rc.1";
 
 /** Internal signal carrying a non-zero exit code out of a commander action. */
 export class ExitCodeError extends Error {

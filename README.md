@@ -115,7 +115,7 @@ See [ARCHITECTURE.md](https://github.com/dooziesoft/doozctl/blob/main/ARCHITECTU
 
 ## Status
 
-All six workflows are implemented and tested (246 tests, 94.7% coverage):
+All six workflows are implemented and tested (247 tests, 94.6% coverage):
 
 - ✅ init
 - ✅ sync

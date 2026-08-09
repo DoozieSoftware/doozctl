@@ -15,9 +15,9 @@ trust and adopt DoozCTL?**
 - [x] Repository memory (`.ai/`) with immutable sessions
 - [x] CI on Linux/macOS/Windows × Node 20/22/24
 - [x] Docs: README, spec, architecture, contributing, security, changelog
-- [ ] Examples repository (hello-world, brownfield, generated)
-- [ ] Release automation (tag → npm publish)
-- [ ] Independent product review, then `v1.0.0`
+- [x] Examples (hello-world, brownfield, generated) in `examples/`
+- [x] Release automation (tag → npm publish + draft GitHub release)
+- [x] Independent product review (see CHANGELOG `1.0.0-rc.1`)
 
 ## v1.1 — Understanding
 

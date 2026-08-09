@@ -7,7 +7,7 @@ body:
     attributes:
       label: DoozCTL version
       description: Output of `doozctl --version`
-      placeholder: "0.3.0-alpha.1"
+      placeholder: "1.0.0-rc.1"
     validations:
       required: true
   - type: textarea
