@@ -356,7 +356,7 @@ export interface SaveAnalysisDeps {
   store: RepositoryStore;
 }
 
-/** Save Analysis: persist repository analysis (read-only command). */
+/** Save Analysis: persist repository analysis to `.ai/repository-analysis.json`. */
 export function saveAnalysisStep(deps: SaveAnalysisDeps): PipelineStep {
   return named("saveAnalysis", async (ctx) => {
     if (ctx.analysis === null) {

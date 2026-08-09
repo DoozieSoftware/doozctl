@@ -30,10 +30,11 @@ import {
 /**
  * Command-specific pipelines.
  *
- * Every command does not run the same pipeline. Read-only commands (analyze,
- * status) never reach write; doctor is validate + report; summarize appends a
- * session. init is the only command that runs the full seven-stage pipeline.
- * sync re-renders from persisted repository state (it never re-analyzes).
+ * Every command does not run the same pipeline. Read-only commands (status)
+ * never reach write; doctor is validate + report; summarize appends a session;
+ * analyze persists the repository analysis but never writes artifacts. init is
+ * the only command that runs the full seven-stage pipeline. sync re-renders
+ * from persisted repository state (it never re-analyzes).
  */
 
 /** The full init pipeline: Analyze → Load → Lifecycle → Resolve → Render → Merge → Validate → Write. */
@@ -52,7 +53,7 @@ export function initPipeline(
   ];
 }
 
-/** Analyze: update repository analysis only. Read-only; never writes artifacts. */
+/** Analyze: re-analyze and persist the repository analysis. Never writes artifacts. */
 export function analyzePipeline(
   deps: AnalyzeDeps & SaveAnalysisDeps & LoadStateDeps,
 ): PipelineStep[] {
