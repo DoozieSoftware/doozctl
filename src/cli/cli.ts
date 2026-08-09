@@ -38,7 +38,8 @@ const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     example: "doozctl init . ./standards",
   },
   analyze: {
-    description: "Update the repository analysis. Read-only.",
+    description:
+      "Re-analyze the repository and update the repository memory (.ai/repository-analysis.json).",
     argumentDescription: "the repository path",
     usage: "doozctl analyze [repo]",
     example: "doozctl analyze .",

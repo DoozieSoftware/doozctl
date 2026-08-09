@@ -46,9 +46,9 @@ describe("command pipelines", () => {
     expect(initPipeline(deps).map(fnOf)).toContain("lifecycleStep");
   });
 
-  it("analyze is read-only and never writes", () => {
+  it("analyze requires an initialized repository and never sends a content write", () => {
     const steps = analyzePipeline(deps);
-    expect(steps).toHaveLength(2);
+    expect(steps.map(fnOf)).toEqual(["loadStateStep", "analyzeStep", "saveAnalysisStep"]);
     expect(steps.map(fnOf)).not.toContain("writeStep");
   });
 

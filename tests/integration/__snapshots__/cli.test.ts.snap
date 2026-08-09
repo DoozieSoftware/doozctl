@@ -10,7 +10,8 @@ Options:
   -h, --help           display help for command
 
 Commands:
-  analyze [args...]    Update the repository analysis. Read-only.
+  analyze [args...]    Re-analyze the repository and update the repository
+                       memory (.ai/repository-analysis.json).
   doctor [args...]     Validate the repository and report problems. Read-only.
   init [args...]       Initialize a repository with AI repository standards.
   status [args...]     Display repository status. Read-only.

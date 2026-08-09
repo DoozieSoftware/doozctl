@@ -141,7 +141,7 @@ describe("App", () => {
 
     const executed = calls.map((c) => c.steps);
     expect(executed).toEqual([
-      ["analyzeStep", "saveAnalysisStep"],
+      ["loadStateStep", "analyzeStep", "saveAnalysisStep"],
       ["loadStateStep", "loadStep", "reportStep"],
       [
         "loadStateStep",

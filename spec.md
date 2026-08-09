@@ -463,9 +463,9 @@ Responsibilities
 
 ## analyze
 
-Update repository analysis.
+Update repository analysis (`.ai/repository-analysis.json`).
 
-Read-only.
+Requires an initialized repository.
 
 ---
 

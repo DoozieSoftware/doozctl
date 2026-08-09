@@ -53,8 +53,10 @@ export function initPipeline(
 }
 
 /** Analyze: update repository analysis only. Read-only; never writes artifacts. */
-export function analyzePipeline(deps: AnalyzeDeps & SaveAnalysisDeps): PipelineStep[] {
-  return [analyzeStep(deps), saveAnalysisStep(deps)];
+export function analyzePipeline(
+  deps: AnalyzeDeps & SaveAnalysisDeps & LoadStateDeps,
+): PipelineStep[] {
+  return [loadRepositoryStateStep(deps), analyzeStep(deps), saveAnalysisStep(deps)];
 }
 
 /**

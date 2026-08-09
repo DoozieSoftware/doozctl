@@ -3,6 +3,7 @@ import type { PipelineStep } from "../engine/engine.js";
 import type {
   AnalyzeDeps,
   LoadDeps,
+  LoadStateDeps,
   MergeDeps,
   SaveAnalysisDeps,
   ValidateDeps,
@@ -31,7 +32,14 @@ import { readFile } from "node:fs/promises";
 
 /** Infrastructure dependencies for the application. */
 export interface AppDeps
-  extends AnalyzeDeps, LoadDeps, MergeDeps, ValidateDeps, WriteDeps, SaveAnalysisDeps {
+  extends
+    AnalyzeDeps,
+    LoadDeps,
+    LoadStateDeps,
+    MergeDeps,
+    ValidateDeps,
+    WriteDeps,
+    SaveAnalysisDeps {
   /** Print a line of user-facing output (e.g. the init success report). */
   print: (message: string) => void;
   /** Clock used to derive session ids and timestamps. */
@@ -60,7 +68,10 @@ export class App {
     return 0;
   }
 
-  /** analyze: update repository analysis only. Read-only. */
+  /**
+   * analyze: re-analyze the repository and update the repository memory
+   * (`.ai/repository-analysis.json`). Requires an initialized repository.
+   */
   async analyze(args: string[]): Promise<number> {
     return this.run(analyzePipeline(this.deps), args);
   }
