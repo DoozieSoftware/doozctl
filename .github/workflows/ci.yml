@@ -42,6 +42,9 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Coverage gate (≥ 80%)
+        run: pnpm test:coverage
+
       - name: Build
         run: pnpm build
 
