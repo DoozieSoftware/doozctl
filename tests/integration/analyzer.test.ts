@@ -7,13 +7,6 @@ import { RepositoryAnalyzer } from "../../src/engine/repository-analyzer.js";
 import { GitService } from "../../src/infra/git/git.js";
 
 /**
- * Normalize a path for cross-platform comparison: Windows reports 8.3 short
- * names (e.g. RUNNER~1) from git while realpathSync may return the long form,
- * so compare case-insensitively with forward slashes.
- */
-const normalizePath = (p: string): string => p.replace(/\\/g, "/").toLowerCase();
-
-/**
  * Integration tests: RepositoryAnalyzer against a real git repository with
  * real git detection. Requires the git binary; offline and deterministic.
  */
@@ -49,7 +42,7 @@ describe("RepositoryAnalyzer (integration)", () => {
     const dir = makeRepo();
     const analysis = await new RepositoryAnalyzer({ git: new GitService() }).analyze(dir);
     expect(analysis.git).toEqual({ isRepository: true, branch: "main", dirty: false });
-    expect(normalizePath(analysis.root)).toBe(normalizePath(realpathSync(dir)));
+    expect(analysis.root).toBe(realpathSync(dir));
     cleanup();
   });
 

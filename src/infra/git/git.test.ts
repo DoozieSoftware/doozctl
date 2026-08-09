@@ -6,13 +6,6 @@ import { describe, expect, it } from "vitest";
 import { GitService } from "./git.js";
 
 /**
- * Normalize a path for cross-platform comparison: Windows reports 8.3 short
- * names (e.g. RUNNER~1) from git while realpathSync may return the long form,
- * so compare case-insensitively with forward slashes.
- */
-const normalizePath = (p: string): string => p.replace(/\\/g, "/").toLowerCase();
-
-/**
  * Integration-style tests for GitService using real temporary git
  * repositories. Requires the git binary; offline and deterministic.
  */
@@ -54,7 +47,7 @@ describe("GitService", () => {
     tempDirs.push(dir);
     const info = await new GitService().detect(dir);
     expect(info).not.toBeNull();
-    expect(normalizePath(info?.root ?? "")).toBe(normalizePath(realpathSync(dir)));
+    expect(info?.root).toBe(realpathSync(dir));
     expect(info?.branch).toBe("main");
     expect(info?.dirty).toBe(false);
     cleanup();
@@ -66,7 +59,7 @@ describe("GitService", () => {
     const nested = path.join(dir, "packages", "app");
     execFileSync("mkdir", ["-p", nested], { cwd: dir });
     const info = await new GitService().detect(nested);
-    expect(normalizePath(info?.root ?? "")).toBe(normalizePath(realpathSync(dir)));
+    expect(info?.root).toBe(realpathSync(dir));
     expect(info?.branch).toBe("main");
     cleanup();
   });

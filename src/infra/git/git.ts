@@ -1,5 +1,4 @@
 import { execFile } from "node:child_process";
-import { realpathSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -28,7 +27,10 @@ export class GitService {
     if (rootOut === null) {
       return null;
     }
-    const root = realpathSync(path.resolve(rootOut));
+    // path.normalize (not realpath) so the reported root matches the form git
+    // emits on every platform — including Windows 8.3 short names — which the
+    // tests compare against realpathSync(dir).
+    const root = path.normalize(rootOut);
     const branchOut = await this.git(root, ["rev-parse", "--abbrev-ref", "HEAD"]);
     const branch = branchOut !== null && branchOut !== "HEAD" ? branchOut : null;
     const status = await this.git(root, ["status", "--porcelain"]);
