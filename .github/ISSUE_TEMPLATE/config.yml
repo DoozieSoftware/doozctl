@@ -1,0 +1,6 @@
+# Issue templates
+blank_issues_enabled: false
+contact_links:
+  - name: Security
+    url: mailto:security@dooziesoft.com
+    about: Report security vulnerabilities privately.

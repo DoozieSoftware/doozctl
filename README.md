@@ -84,7 +84,27 @@ Engine state:      .dooz/manifest.json
 Repository memory: .ai/repository-analysis.json
 ```
 
-A Standards Package is just a directory containing a `package.json` manifest that declares artifacts. See [spec.md](spec.md) for the contract.
+A Standards Package is just a directory containing a `package.json` manifest that declares artifacts. See [spec.md](spec.md) for the contract. Ready-to-run packages live in [examples/](examples/README.md).
+
+## Commands
+
+```sh
+doozctl init <repo> <package>                 # analyze, render, install artifacts
+doozctl sync <repo> <package>                 # re-render managed artifacts, keep your edits
+doozctl analyze [repo]                        # update repository analysis only
+doozctl summarize <repo> <package> <session>  # append an immutable session summary
+doozctl doctor <repo> <package>               # verify repository health
+doozctl status [repo]                         # show what DoozCTL understands
+```
+
+Every command supports `--help` with usage and an example.
+
+## Exit codes
+
+| Code | Meaning |
+|------|---------|
+| `0`  | Success |
+| `1`  | Error (missing arguments, uninitialized repository, malformed state, etc.) |
 
 ## Design
 

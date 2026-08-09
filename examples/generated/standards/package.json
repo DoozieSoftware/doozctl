@@ -1,0 +1,15 @@
+{
+  "format": 2,
+  "name": "@dooziesoft/standards-generated",
+  "version": "1.0.0",
+  "engine": ">=0.3.0",
+  "artifacts": [
+    {
+      "id": "wrapper",
+      "source": "artifacts/WRAPPER.md",
+      "destination": "WRAPPER.md",
+      "merge": "replace-generated",
+      "lifecycle": ["init", "sync"]
+    }
+  ]
+}

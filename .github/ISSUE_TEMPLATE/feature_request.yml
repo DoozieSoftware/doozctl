@@ -1,0 +1,29 @@
+name: Feature request
+description: Suggest an improvement to DoozCTL
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the real workflow that is hard or impossible today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: How should DoozCTL behave instead?
+    validations:
+      required: true
+  - type: textarea
+    id: fit
+    attributes:
+      label: Fit with the design
+      description: |
+        DoozCTL is minimal, deterministic, offline, vendor-neutral, and
+        brownfield-first. How does this change hold up against those values?
+        The engine itself knows no domain — domain behavior belongs in
+        Standards Packages.
+    validations:
+      required: false

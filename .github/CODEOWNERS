@@ -1,0 +1,8 @@
+# Ownership for the DoozCTL repository.
+# Reviewers listed below are auto-assigned to matching paths.
+
+* @dooziesoft/core
+
+/src/engine/merge.ts @dooziesoft/core
+/spec.md @dooziesoft/core
+/ARCHITECTURE.md @dooziesoft/core
