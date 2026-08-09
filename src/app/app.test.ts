@@ -134,7 +134,7 @@ describe("App", () => {
     await writeFile(sessionFile, "## Summary\ndone\n", "utf-8");
 
     await (app.analyze as (args: string[]) => Promise<number>)([repo]);
-    await (app.doctor as (args: string[]) => Promise<number>)([repo]);
+    await (app.doctor as (args: string[]) => Promise<number>)([repo, pkg]);
     await app.summarize([repo, pkg, sessionFile]);
     await (app.status as (args: string[]) => Promise<number>)([repo]);
     await app.sync([repo, pkg]);
@@ -211,8 +211,13 @@ describe("App", () => {
     const { engine, calls } = spyEngine();
     const app = new App(engine, buildDeps().deps);
 
+    const args: Record<string, string[]> = {
+      analyze: [],
+      doctor: ["/tmp/repo", "/tmp/pkg"],
+      status: [],
+    };
     for (const cmd of ["analyze", "doctor", "status"]) {
-      await (app[cmd as keyof App] as (args: string[]) => Promise<number>)([]);
+      await (app[cmd as keyof App] as (args: string[]) => Promise<number>)(args[cmd] as string[]);
     }
 
     for (const call of calls) {

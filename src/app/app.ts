@@ -119,6 +119,9 @@ export class App {
 
   /** doctor: validate the repository and report. Read-only. */
   async doctor(args: string[]): Promise<number> {
+    if (args.length < 2) {
+      throw new Error(DOCTOR_USAGE);
+    }
     return this.run(doctorPipeline(this.deps), args);
   }
 
@@ -253,6 +256,14 @@ const SYNC_USAGE = [
   "",
   "Usage:   doozctl sync <repo> <package>",
   "Example: doozctl sync . ./standards",
+].join("\n");
+
+/** User-facing usage for doctor, shown when arguments are missing. */
+const DOCTOR_USAGE = [
+  "doctor requires a repository path and a Standards Package directory.",
+  "",
+  "Usage:   doozctl doctor <repo> <package>",
+  "Example: doozctl doctor . ./standards",
 ].join("\n");
 
 /** User-facing usage for summarize, shown when arguments are missing. */

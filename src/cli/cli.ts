@@ -51,9 +51,9 @@ const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   },
   doctor: {
     description: "Validate the repository and report problems. Read-only.",
-    argumentDescription: "the repository path",
-    usage: "doozctl doctor [repo]",
-    example: "doozctl doctor .",
+    argumentDescription: "the repository path, then the Standards Package directory",
+    usage: "doozctl doctor <repo> <package>",
+    example: "doozctl doctor . ./standards",
   },
   summarize: {
     description: "Append an immutable session summary and update the current context.",
