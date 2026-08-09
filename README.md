@@ -1,5 +1,7 @@
 # DoozCTL
 
+[![Site](https://img.shields.io/badge/site-ctl.dooziesoft.com-4A5ABA)](https://ctl.dooziesoft.com)
+
 AI coding tools lose context.
 
 Repositories shouldn't.
