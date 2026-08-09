@@ -2,7 +2,6 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { NotImplementedError } from "../errors.js";
 import { createArtifact } from "../model/artifact.js";
 import type { Analysis } from "../model/model.js";
 import { RepositoryStore } from "../store/repository-store.js";
@@ -533,7 +532,67 @@ describe("pipeline steps", () => {
     );
   });
 
-  it("report step is scaffolding", async () => {
-    await expect(runSteps([reportStep()])).rejects.toBeInstanceOf(NotImplementedError);
+  it("status report step prints what DoozCTL understands about the repository", async () => {
+    const printed: string[] = [];
+    await runSteps(
+      [
+        async (c) => {
+          c.analysis = minimalAnalysis("/repo");
+        },
+        reportStep({ print: (m) => printed.push(m), store: new RepositoryStore() }, "status"),
+      ],
+      { root: "/repo" },
+    );
+    expect(printed).toHaveLength(1);
+    expect(printed[0]).toContain("Repository: /repo");
+    expect(printed[0]).toContain("Git: not a repository");
+    expect(printed[0]).toContain("Files: 0 total · 0 source · 0 test");
+  });
+
+  it("doctor report step reports a healthy repository", async () => {
+    const printed: string[] = [];
+    await runSteps([
+      async (c) => {
+        c.manifest = { version: 1, artifacts: ["agents"] };
+        c.standards = {
+          format: 2,
+          name: "@dooziesoft/standards",
+          version: "1.0.0",
+          engine: ">=1.0.0",
+          artifacts: [],
+        };
+        c.artifacts = [createArtifact({
+          id: "agents",
+          source: { path: "a.md" },
+          destination: { path: "AGENTS.md" },
+          mergeStrategy: "managed-blocks",
+          lifecycle: ["init", "sync"],
+        })];
+      },
+      reportStep({ print: (m) => printed.push(m), store: new RepositoryStore() }, "doctor"),
+    ]);
+    expect(printed[0]).toContain("Repository is healthy.");
+    expect(printed[0]).toContain("✓ Initialized — .dooz/manifest.json");
+    expect(printed[0]).toContain("✓ Generated artifacts recorded — 1 in manifest");
+  });
+
+  it("doctor report step flags artifacts missing from the manifest", async () => {
+    const printed: string[] = [];
+    await runSteps([
+      async (c) => {
+        c.manifest = { version: 1, artifacts: [] };
+        c.artifacts = [createArtifact({
+          id: "agents",
+          source: { path: "a.md" },
+          destination: { path: "AGENTS.md" },
+          mergeStrategy: "managed-blocks",
+          lifecycle: ["init", "sync"],
+        })];
+      },
+      reportStep({ print: (m) => printed.push(m), store: new RepositoryStore() }, "doctor"),
+    ]);
+    expect(printed[0]).toContain("Problems found:");
+    expect(printed[0]).toContain("Artifacts not recorded in the manifest: agents");
+    expect(printed[0]).not.toContain("Repository is healthy.");
   });
 });

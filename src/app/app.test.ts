@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { App, type AppDeps } from "./app.js";
-import { NotImplementedError } from "../errors.js";
 import { Engine } from "../engine/engine.js";
 import {
   builtinMergers,
@@ -143,7 +142,7 @@ describe("App", () => {
     const executed = calls.map((c) => c.steps);
     expect(executed).toEqual([
       ["analyzeStep", "saveAnalysisStep"],
-      ["validateStep", "reportStep"],
+      ["loadStateStep", "loadStep", "reportStep"],
       [
         "loadStateStep",
         "loadStep",
@@ -221,12 +220,40 @@ describe("App", () => {
     }
   });
 
-  it("doctor and status are scaffolding until implemented", async () => {
+  it("doctor reports a healthy repository after init", async () => {
     const dir = await tmp();
-    const app = new App(new Engine(), buildDeps().deps);
-    for (const cmd of ["doctor", "status"]) {
-      const method = app[cmd as keyof App].bind(app) as (args: string[]) => Promise<number>;
-      await expect(method([dir])).rejects.toBeInstanceOf(NotImplementedError);
-    }
+    const pkg = await tmp();
+    await writePackage(pkg);
+
+    const { deps } = buildDeps();
+    const app = new App(new Engine(), deps);
+    await app.init([dir, pkg]);
+
+    const { deps: doctorDeps, printed: doctorPrinted } = buildDeps();
+    const doctor = new App(new Engine(), doctorDeps);
+    await expect(doctor.doctor([dir, pkg])).resolves.toBe(0);
+    expect(doctorPrinted.join("\n")).toContain("Repository is healthy.");
+    expect(doctorPrinted.join("\n")).toContain("✓ Initialized — .dooz/manifest.json");
+  });
+
+  it("doctor rejects a repository that was never initialized", async () => {
+    const dir = await tmp();
+    const pkg = await tmp();
+    await writePackage(pkg);
+    const { deps } = buildDeps();
+    const app = new App(new Engine(), deps);
+    await expect(app.doctor([dir, pkg])).rejects.toThrow(/not initialized/);
+  });
+
+  it("status prints a report about the repository", async () => {
+    const dir = await tmp();
+    await mkdir(path.join(dir, "src"), { recursive: true });
+    await writeFile(path.join(dir, "src", "main.ts"), "export {};\n", "utf-8");
+
+    const { deps, printed } = buildDeps();
+    const app = new App(new Engine(), deps);
+    await expect(app.status([dir])).resolves.toBe(0);
+    expect(printed.join("\n")).toContain("Repository: " + dir);
+    expect(printed.join("\n")).toContain("Languages: TypeScript");
   });
 });

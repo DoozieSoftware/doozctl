@@ -11,7 +11,9 @@ import {
 import type {
   AnalyzeDeps,
   LoadDeps,
+  LoadStateDeps,
   MergeDeps,
+  ReportDeps,
   SaveAnalysisDeps,
   ValidateDeps,
   WriteDeps,
@@ -24,7 +26,8 @@ const deps = {
   mergers: {},
   validator: {},
   store: {},
-} as AnalyzeDeps & LoadDeps & MergeDeps & ValidateDeps & WriteDeps & SaveAnalysisDeps;
+  print: () => {},
+} as unknown as AnalyzeDeps & LoadDeps & LoadStateDeps & MergeDeps & ValidateDeps & WriteDeps & SaveAnalysisDeps & ReportDeps;
 
 describe("command pipelines", () => {
   it("init runs the full eight-stage pipeline", () => {
@@ -50,9 +53,9 @@ describe("command pipelines", () => {
     expect(steps.map(fnOf)).toContain("lifecycleStep");
   });
 
-  it("doctor is validate + report and never writes", () => {
+  it("doctor verifies initialization and reports, never writing", () => {
     const steps = doctorPipeline(deps);
-    expect(steps.map(fnOf)).toEqual(["validateStep", "reportStep"]);
+    expect(steps.map(fnOf)).toEqual(["loadStateStep", "loadStep", "reportStep"]);
   });
 
   it("status is read-only and never writes", () => {

@@ -1,6 +1,7 @@
 import type {
   Analysis,
   Artifact,
+  Manifest,
   RenderedArtifact,
   StandardsPackage,
   Variables,
@@ -34,6 +35,8 @@ export interface ExecutionContext {
   standards: StandardsPackage | null;
   /** In-flight artifacts (filled by load, consumed by render/write). */
   artifacts: Artifact[];
+  /** Engine manifest, when the run loaded repository state (filled by loadState). */
+  manifest: Manifest | null;
   /** Rendered artifacts (filled by render, consumed by merge/write). */
   rendered: RenderedArtifact[];
   /** Merged artifacts (filled by merge, consumed by write). */
@@ -59,6 +62,7 @@ export class Engine {
       variables: {},
       standards: null,
       artifacts: [],
+      manifest: null,
       rendered: [],
       merged: [],
     };

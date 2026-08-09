@@ -5,6 +5,7 @@ import type {
   LoadDeps,
   LoadStateDeps,
   MergeDeps,
+  ReportDeps,
   SaveAnalysisDeps,
   SessionDeps,
   ValidateDeps,
@@ -77,9 +78,13 @@ export function syncPipeline(
   ];
 }
 
-/** Doctor: validate the repository and report problems. Never writes. */
-export function doctorPipeline(deps: ValidateDeps): PipelineStep[] {
-  return [validateStep(deps), reportStep()];
+/**
+ * Doctor: verify the repository is initialized and the Standards Package
+ * loads, then report health problems. Never writes. The load-state step
+ * short-circuits with a clear error when the repository is not initialized.
+ */
+export function doctorPipeline(deps: LoadStateDeps & LoadDeps & ReportDeps): PipelineStep[] {
+  return [loadRepositoryStateStep(deps), loadStep(deps), reportStep(deps, "doctor")];
 }
 
 /**
@@ -106,7 +111,7 @@ export function summarizePipeline(
   ];
 }
 
-/** Status: report repository status. Read-only; never writes. */
-export function statusPipeline(deps: AnalyzeDeps): PipelineStep[] {
-  return [analyzeStep(deps), reportStep()];
+/** Status: report what DoozCTL understands about the repository. Read-only; never writes. */
+export function statusPipeline(deps: AnalyzeDeps & ReportDeps): PipelineStep[] {
+  return [analyzeStep(deps), reportStep(deps, "status")];
 }

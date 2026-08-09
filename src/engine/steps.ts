@@ -1,4 +1,3 @@
-import { NotImplementedError } from "../errors.js";
 import type { GitService } from "../infra/git/git.js";
 import { createArtifact } from "../model/artifact.js";
 import type { Manifest, RenderedArtifact, SessionInput, Workflow } from "../model/model.js";
@@ -7,7 +6,7 @@ import type { RepositoryStore } from "../store/repository-store.js";
 import { Storage } from "../store/storage.js";
 import { ArtifactRenderer } from "./artifact-renderer.js";
 import type { Analyzer, StandardsLoader, StrategyMerger, Validator } from "./contracts.js";
-import type { ExecutionContext, PipelineStep } from "./engine.js";
+import type { PipelineStep } from "./engine.js";
 import {
   capField,
   extractPreviousContext,
@@ -15,6 +14,7 @@ import {
   resolveContextFields,
   resolveDestinationTemplate,
 } from "./session.js";
+import { buildDoctorReport, buildStatusReport } from "./report.js";
 import { resolveVariables } from "./variable-resolver.js";
 
 /**
@@ -26,14 +26,6 @@ import { resolveVariables } from "./variable-resolver.js";
  * is sandboxed to a root, so filesystem-backed steps construct it per run from
  * the execution context (the repository and package roots are per-run values).
  */
-
-const stub = (name: string): PipelineStep => {
-  const step: PipelineStep = async (_ctx: ExecutionContext): Promise<void> => {
-    throw new NotImplementedError(`engine.${name}`);
-  };
-  Object.defineProperty(step, "name", { value: `${name}Step`, configurable: true });
-  return step;
-};
 
 /** Give a step its stable function name, which pipeline tests rely on. */
 function named(name: string, step: PipelineStep): PipelineStep {
@@ -207,6 +199,7 @@ export function loadRepositoryStateStep(deps: LoadStateDeps): PipelineStep {
         `unsupported manifest version ${manifest.version}; expected version 1. Re-run doozctl init to repair it.`,
       );
     }
+    ctx.manifest = manifest;
 
     if (!(await repo.exists(".ai", "repository-analysis.json"))) {
       throw new Error(
@@ -373,7 +366,41 @@ export function saveAnalysisStep(deps: SaveAnalysisDeps): PipelineStep {
   });
 }
 
-/** Report: produce a human-readable report for read-only commands. */
-export function reportStep(): PipelineStep {
-  return stub("report");
+/** Which read-only report to build. */
+export type ReportKind = "status" | "doctor";
+
+/** Dependencies for the report step. */
+export interface ReportDeps {
+  print: (message: string) => void;
+  store: RepositoryStore;
+}
+
+/**
+ * Report: produce a human-readable report for the read-only commands.
+ *
+ * status describes what DoozCTL understands about the repository (the
+ * analysis); doctor validates the repository's health. Both print via the
+ * injected printer and never write.
+ */
+export function reportStep(deps: ReportDeps, kind: ReportKind): PipelineStep {
+  return named("report", async (ctx) => {
+    if (kind === "status") {
+      deps.print(buildStatusReport(ctx));
+      return;
+    }
+    let manifest = ctx.manifest;
+    if (manifest === null) {
+      manifest = await readManifestOrNull(deps.store, ctx.root);
+    }
+    deps.print(buildDoctorReport(ctx, manifest));
+  });
+}
+
+/** Read the engine manifest, or null when it is missing or malformed. */
+async function readManifestOrNull(store: RepositoryStore, root: string): Promise<Manifest | null> {
+  try {
+    return await store.loadManifest(root);
+  } catch {
+    return null;
+  }
 }

@@ -131,15 +131,52 @@ describe("doozctl CLI (integration)", () => {
     const dispatcher = buildDispatcher();
     const { repo, pkg } = await makeRepoAndPackage();
 
-    // init, sync and analyze succeed against a real package/repository.
+    // init, sync, analyze, doctor and status succeed against a real package.
     expect(await runCli(["init", repo, pkg], dispatcher)).toBe(0);
     expect(await runCli(["sync", repo, pkg], dispatcher)).toBe(0);
     expect(await runCli(["analyze", repo], dispatcher)).toBe(0);
+    expect(await runCli(["doctor", repo, pkg], dispatcher)).toBe(0);
+    expect(await runCli(["status", repo], dispatcher)).toBe(0);
 
-    // Still-scaffolding commands exit 1.
-    for (const cmd of ["doctor", "summarize", "status"]) {
-      expect(await runCli([cmd, repo], dispatcher)).toBe(1);
-    }
+    // summarize without a session file exits 1 with usage guidance.
+    expect(await runCli(["summarize", repo, pkg], dispatcher)).toBe(1);
+  });
+
+  it("doctor prints a health report to stdout", async () => {
+    const { repo, pkg } = await makeRepoAndPackage();
+    const streams = capture();
+    const app = new App(new Engine(), {
+      ...buildDeps(),
+      print: (message) => streams.stdout.write(message + "\n"),
+    });
+    const dispatcher = new Dispatcher()
+      .register("init", app.init.bind(app))
+      .register("doctor", app.doctor.bind(app));
+
+    await runCli(["init", repo, pkg], dispatcher, streams);
+    const code = await runCli(["doctor", repo, pkg], dispatcher, streams);
+
+    expect(code).toBe(0);
+    expect(streams.out()).toContain("Repository is healthy.");
+    expect(streams.out()).toContain("✓ Standards package — @dooziesoft/standards 1.0.0");
+  });
+
+  it("status prints an analysis report to stdout", async () => {
+    const { repo, pkg } = await makeRepoAndPackage();
+    await mkdir(path.join(repo, "src"), { recursive: true });
+    await writeFile(path.join(repo, "src", "main.ts"), "export {};\n");
+    const streams = capture();
+    const app = new App(new Engine(), {
+      ...buildDeps(),
+      print: (message) => streams.stdout.write(message + "\n"),
+    });
+    const dispatcher = new Dispatcher().register("status", app.status.bind(app));
+
+    const code = await runCli(["status", repo], dispatcher, streams);
+
+    expect(code).toBe(0);
+    expect(streams.out()).toContain("Repository: " + repo);
+    expect(streams.out()).toContain("Languages: TypeScript");
   });
 
   it("renders a deterministic help snapshot", async () => {

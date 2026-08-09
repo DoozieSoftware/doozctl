@@ -105,9 +105,9 @@ Core engine complete (v0.3.0-alpha.1). Orchestration in progress:
 - ✅ Merge Engine
 - ✅ init
 - ✅ sync
-- ⏳ summarize
-- ⏳ doctor
-- ⏳ status
+- ✅ summarize
+- ✅ doctor
+- ✅ status
 
 ## v1.0 definition
 
