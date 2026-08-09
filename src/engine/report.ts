@@ -75,21 +75,30 @@ export function buildDoctorReport(ctx: ExecutionContext, manifest: Manifest | nu
     lines.push(check(true, `Standards package — ${ctx.standards.name} ${ctx.standards.version}`));
   }
 
-  const declared = ctx.artifacts.map((artifact) => artifact.id);
-  lines.push(check(true, `Artifacts — ${declared.length} declared`));
+  // Only artifacts that init or sync persist are expected to be in the manifest.
+  // summarize-only artifacts are recorded later, by summarize, so a healthy
+  // repository that has only been initialized or synced must not be flagged for
+  // them. Comparing against every declared artifact would produce a false
+  // "problems found" report on the canonical all-strategies package.
+  const expected = ctx.artifacts
+    .filter(
+      (artifact) => artifact.lifecycle.includes("init") || artifact.lifecycle.includes("sync"),
+    )
+    .map((artifact) => artifact.id);
+  lines.push(check(true, `Artifacts — ${ctx.artifacts.length} declared`));
 
   const recorded = new Set(manifest?.artifacts ?? []);
-  const missing = declared.filter((id) => !recorded.has(id));
+  const missing = expected.filter((id) => !recorded.has(id));
   if (missing.length === 0) {
     lines.push(check(true, `Generated artifacts recorded — ${recorded.size} in manifest`));
   } else {
     problems.push(
-      `Artifacts not recorded in the manifest: ${missing.join(", ")}. Run doozctl init to repair.`,
+      `Artifacts not recorded in the manifest: ${missing.join(", ")}. Re-run doozctl init or doozctl sync to repair.`,
     );
     lines.push(
       check(
         false,
-        `Generated artifacts recorded — ${recorded.size} of ${declared.length} in manifest`,
+        `Generated artifacts recorded — ${recorded.size} of ${expected.length} in manifest`,
       ),
     );
   }

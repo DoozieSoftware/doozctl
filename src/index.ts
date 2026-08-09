@@ -51,6 +51,10 @@ async function main(): Promise<number> {
 
   const program = buildProgram(dispatcher);
   try {
+    if (process.argv.length <= 2) {
+      program.help();
+      return ExitCode.OK;
+    }
     await program.parseAsync(process.argv);
     return ExitCode.OK;
   } catch (err) {

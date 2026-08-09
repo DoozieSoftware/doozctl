@@ -241,6 +241,50 @@ describe("App", () => {
     expect(doctorPrinted.join("\n")).toContain("✓ Initialized — .dooz/manifest.json");
   });
 
+  it("doctor reports a healthy repository when a package declares summarize-only artifacts", async () => {
+    const dir = await tmp();
+    const pkg = await tmp();
+    await writePackage(pkg);
+    await writeFile(
+      path.join(pkg, "package.json"),
+      JSON.stringify({
+        format: 2,
+        name: "@dooziesoft/standards",
+        version: "1.0.0",
+        engine: ">=1.0.0",
+        artifacts: [
+          {
+            id: "agents",
+            source: "artifacts/AGENTS.md",
+            destination: "AGENTS.md",
+            merge: "managed-blocks",
+            lifecycle: ["init", "sync"],
+          },
+          {
+            id: "session",
+            source: "artifacts/session.md",
+            destination: ".ai/sessions/{{session.id}}.md",
+            merge: "append",
+            lifecycle: ["summarize"],
+          },
+        ],
+      }),
+    );
+    await mkdir(path.join(pkg, "artifacts"), { recursive: true });
+    await writeFile(path.join(pkg, "artifacts", "session.md"), "summary", "utf-8");
+
+    const { deps } = buildDeps();
+    const app = new App(new Engine(), deps);
+    await app.init([dir, pkg]);
+
+    const { deps: doctorDeps, printed: doctorPrinted } = buildDeps();
+    const doctor = new App(new Engine(), doctorDeps);
+    await expect(doctor.doctor([dir, pkg])).resolves.toBe(0);
+    const report = doctorPrinted.join("\n");
+    expect(report).toContain("Repository is healthy.");
+    expect(report).not.toContain("not recorded in the manifest");
+  });
+
   it("doctor rejects a repository that was never initialized", async () => {
     const dir = await tmp();
     const pkg = await tmp();
