@@ -27,10 +27,10 @@ jobs:
       - name: Set package version from tag
         run: |
           VERSION="${GITHUB_REF_NAME#standards-v}"
-          node -e "
+          VERSION="$VERSION" node -e "
             const fs = require('fs');
             const p = JSON.parse(fs.readFileSync('standards/package.json', 'utf8'));
-            p.version = VERSION;
+            p.version = process.env.VERSION;
             fs.writeFileSync('standards/package.json', JSON.stringify(p, null, 2) + '\n');
           "
           echo "Publishing @dooziesoft/doozctl-standards@${VERSION}"
