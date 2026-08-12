@@ -1,5 +1,5 @@
 import { Writable } from "node:stream";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -186,11 +186,14 @@ describe("doozctl CLI (integration)", () => {
     expect(streams.out()).toMatchSnapshot();
   });
 
-  it("renders a deterministic version snapshot", async () => {
+  it("prints the version from package.json", async () => {
+    const manifest = JSON.parse(
+      await readFile(new URL("../../package.json", import.meta.url), "utf-8"),
+    ) as { version: string };
     const streams = capture();
     const code = await runCli(["--version"], buildDispatcher(), streams);
     expect(code).toBe(0);
-    expect(streams.out()).toMatchSnapshot();
+    expect(streams.out()).toBe(`${manifest.version}\n`);
   });
 
   it("documents init usage and an example in its help", async () => {

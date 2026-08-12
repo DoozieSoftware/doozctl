@@ -22,8 +22,3 @@ Commands:
   help [command]       display help for command
 "
 `;
-
-exports[`doozctl CLI (integration) > renders a deterministic version snapshot 1`] = `
-"1.0.0-rc.2
-"
-`;
