@@ -1,6 +1,7 @@
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import { StandardsPackageLoader } from "./standards-loader.js";
 
@@ -232,5 +233,13 @@ describe("StandardsPackageLoader", () => {
       "artifacts/README.md": "y",
     });
     expect(await loader.load(a)).toEqual(await loader.load(b));
+  });
+
+  it("loads the shipped sample standards package", async () => {
+    const sample = fileURLToPath(new URL("../../standards", import.meta.url));
+    const pkg = await loader.load(sample);
+    expect(pkg.format).toBe(2);
+    expect(pkg.name).toBe("@dooziesoft/doozctl-standards");
+    expect(pkg.artifacts.length).toBeGreaterThan(0);
   });
 });
