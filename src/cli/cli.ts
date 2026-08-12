@@ -10,8 +10,8 @@ import { Dispatcher, ExitCode } from "../dispatcher/dispatcher.js";
  * invoke in tests.
  */
 
-/** Program metadata, overridable at build time. */
-export const VERSION = "1.0.0-rc.1";
+/** Program metadata, set from package.json at build time. */
+export const VERSION = process.env.npm_package_version ?? "0.0.0-dev";
 
 /** Internal signal carrying a non-zero exit code out of a commander action. */
 export class ExitCodeError extends Error {

@@ -24,6 +24,6 @@ Commands:
 `;
 
 exports[`doozctl CLI (integration) > renders a deterministic version snapshot 1`] = `
-"1.0.0-rc.1
+"1.0.0-rc.2
 "
 `;
