@@ -113,6 +113,24 @@ export class Storage {
     }
   }
 
+  /**
+   * List the entry names inside the directory at the relative path, sorted.
+   * A missing directory lists as empty. Read-only, sandboxed.
+   */
+  async list(...parts: string[]): Promise<string[]> {
+    const p = this.resolve(...parts);
+    await this.assertContained(p);
+    try {
+      const entries = await fs.readdir(p, { withFileTypes: true });
+      return entries.map((entry) => entry.name).sort();
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return [];
+      }
+      throw error;
+    }
+  }
+
   /** Delete the file at the relative path; a missing file is a no-op. */
   async delete(...parts: string[]): Promise<void> {
     const p = this.resolve(...parts);

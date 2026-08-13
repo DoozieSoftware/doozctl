@@ -6,6 +6,7 @@ import { Storage } from "./storage.js";
 
 let root: string;
 let storage: Storage;
+let symlinksSupported = true;
 
 beforeAll(async () => {
   root = await mkdtemp(path.join(tmpdir(), "doozctl-storage-"));
@@ -92,6 +93,39 @@ describe("Storage", () => {
     });
   });
 
+  describe("list", () => {
+    it("lists entry names sorted, including subdirectories", async () => {
+      await storage.write("a", "dir", "b.txt");
+      await storage.write("c", "dir", "a.txt");
+      await storage.write("d", "dir", "sub", "nested.txt");
+      await expect(storage.list("dir")).resolves.toEqual(["a.txt", "b.txt", "sub"]);
+    });
+
+    it("lists an empty directory as empty", async () => {
+      await storage.mkdir("empty-dir");
+      await expect(storage.list("empty-dir")).resolves.toEqual([]);
+    });
+
+    it("lists a missing directory as empty", async () => {
+      await expect(storage.list("never-created")).resolves.toEqual([]);
+    });
+
+    it("rejects listing that escapes the root", async () => {
+      await expect(storage.list("..", "..", "secret")).rejects.toThrow("escapes sandbox root");
+    });
+
+    it("rejects listing through a symlink that escapes the root", async () => {
+      if (!symlinksSupported) return;
+      const outside = await mkdtemp(path.join(tmpdir(), "doozctl-outside-list-"));
+      try {
+        await symlink(outside, path.join(root, "linked-list-dir"));
+        await expect(storage.list("linked-list-dir")).rejects.toThrow("escapes sandbox root");
+      } finally {
+        await rm(outside, { recursive: true, force: true });
+      }
+    });
+  });
+
   describe("path safety", () => {
     it("never writes outside the repository root", async () => {
       await expect(storage.write("x", "..", "..", "evil.txt")).rejects.toThrow(
@@ -106,8 +140,6 @@ describe("Storage", () => {
   });
 
   describe("realpath containment", () => {
-    let symlinksSupported = true;
-
     beforeAll(async () => {
       const probe = await mkdtemp(path.join(tmpdir(), "doozctl-symlink-probe-"));
       try {
