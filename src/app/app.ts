@@ -12,13 +12,13 @@ import {
   analyzePipeline,
   doctorPipeline,
   initPipeline,
-  statusPipeline,
   summarizePipeline,
   syncPipeline,
 } from "../engine/pipelines.js";
+import { buildStatusReport } from "../engine/report.js";
 import { formatSessionId, toLocalIso } from "../engine/session.js";
 import { isValidPlanId, planFilename, type Plan } from "../model/plan.js";
-import type { SessionInput } from "../model/model.js";
+import type { Manifest, SessionInput } from "../model/model.js";
 import { PlanStore } from "../store/plan-store.js";
 import { Storage } from "../store/storage.js";
 import {
@@ -208,10 +208,23 @@ export class App {
     return ExitCode.OK;
   }
 
-  /** status: report repository status. Read-only. */
+  /**
+   * status: report the repository and its v2 control plane — repository
+   * facts, initialization, the active plan (if any), its workflow, lifecycle
+   * progress and next action. Strictly read-only: never writes, never
+   * re-analyzes on disk, never touches plans, sessions or git.
+   */
   async status(args: string[]): Promise<number> {
-    await this.run(statusPipeline(this.deps), args);
-    return ExitCode.OK;
+    const root = args[0] ?? ".";
+    const manifest = await this.loadManifestOrNull(root);
+    if (manifest === null) {
+      this.deps.print(STATUS_UNINITIALIZED);
+      return ExitCode.Error;
+    }
+    const analysis = await this.deps.analyzer.analyze(root);
+    const { report, problems } = await buildStatusReport(root, analysis, manifest, this.planStore);
+    this.deps.print(report);
+    return problems.length > 0 ? ExitCode.Error : ExitCode.OK;
   }
 
   /**
@@ -279,6 +292,15 @@ export class App {
 
   private async run(steps: PipelineStep[], args: string[]): Promise<ExecutionContext> {
     return this.engine.run({ root: args[0] ?? ".", standardsDir: args[1] ?? "" }, steps);
+  }
+
+  /** The engine manifest, or null when missing or unreadable. Read-only. */
+  private async loadManifestOrNull(root: string): Promise<Manifest | null> {
+    try {
+      return await this.deps.store.loadManifest(root);
+    } catch {
+      return null;
+    }
   }
 
   /** The declared init-lifecycle destinations, sorted, for the init report. */
@@ -353,6 +375,13 @@ const DOCTOR_USAGE = [
   "",
   "Usage:   doozctl doctor <repo> <package>",
   "Example: doozctl doctor . ./standards",
+].join("\n");
+
+/** The status view for a repository the engine has not initialized. */
+const STATUS_UNINITIALIZED = [
+  "DoozCTL is not initialized in this repository.",
+  "Run:",
+  "  doozctl init <repository> <standards-package>",
 ].join("\n");
 
 /** User-facing usage for summarize, shown when arguments are missing. */

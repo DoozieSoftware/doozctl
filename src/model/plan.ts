@@ -85,6 +85,51 @@ export function planFilename(created: string, id: string): string {
   return `${created}-${id}.md`;
 }
 
+/** The plan id embedded in a `YYYY-MM-DD-<id>.md` filename, or null. */
+export function planIdFromFilename(filename: string): string | null {
+  const match = /^\d{4}-\d{2}-\d{2}-([a-z0-9]+(-[a-z0-9]+)*)\.md$/.exec(filename);
+  return match === null ? null : (match[1] ?? null);
+}
+
+/**
+ * The next canonical lifecycle state after `status`, or undefined for the
+ * terminal states (COMPLETED, ABANDONED). The lifecycle is forward-only, so
+ * the next state is deterministic.
+ */
+export function nextPlanStatus(status: PlanAnyStatus): PlanStatus | undefined {
+  if (status === PLAN_ABANDONED) {
+    return undefined;
+  }
+  const index = PLAN_LIFECYCLE.indexOf(status as PlanStatus);
+  if (index === -1 || index === PLAN_LIFECYCLE.length - 1) {
+    return undefined;
+  }
+  return PLAN_LIFECYCLE[index + 1];
+}
+
+/**
+ * The text of the optional `## Next Action` section, trimmed, or undefined
+ * when the section is absent or empty. A plan's next action is authored
+ * content; reading it never claims the action has happened.
+ */
+export function extractNextAction(content: string): string | undefined {
+  const lines = content.replace(/\r\n?/g, "\n").split("\n");
+  const index = lines.findIndex((line) => /^##\s+Next Action\s*$/.test(line));
+  if (index === -1) {
+    return undefined;
+  }
+  const body: string[] = [];
+  for (let i = index + 1; i < lines.length; i += 1) {
+    const line = lines[i] as string;
+    if (/^##\s/.test(line)) {
+      break;
+    }
+    body.push(line);
+  }
+  const text = body.join("\n").trim();
+  return text === "" ? undefined : text;
+}
+
 /** The four machine-parsed metadata fields, in canonical order. */
 const METADATA_FIELDS = ["id", "method", "status", "created"] as const;
 

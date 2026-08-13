@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   PLAN_ABANDONED,
+  extractNextAction,
   formatPlanDate,
   isPlanStatus,
   isValidPlanDate,
   isValidPlanId,
+  nextPlanStatus,
   parsePlan,
   planFilename,
+  planIdFromFilename,
   renderPlan,
   setPlanStatus,
   transitionPlan,
@@ -366,5 +369,85 @@ describe("transitionPlan", () => {
   it("rejects transitions to or from ABANDONED", () => {
     expect(() => transitionPlan("PLANNED", "ABANDONED")).toThrow(/ABANDONED/);
     expect(() => transitionPlan("ABANDONED", "PLANNED")).toThrow(/ABANDONED/);
+  });
+});
+
+describe("nextPlanStatus", () => {
+  it("returns the deterministic next canonical state", () => {
+    expect(nextPlanStatus("PLANNED")).toBe("EXECUTING");
+    expect(nextPlanStatus("EXECUTING")).toBe("VERIFIED");
+    expect(nextPlanStatus("VERIFIED")).toBe("TESTED");
+    expect(nextPlanStatus("TESTED")).toBe("COMMITTED");
+    expect(nextPlanStatus("COMMITTED")).toBe("MERGED");
+    expect(nextPlanStatus("MERGED")).toBe("COMPLETED");
+  });
+
+  it("returns nothing after the terminal states", () => {
+    expect(nextPlanStatus("COMPLETED")).toBeUndefined();
+    expect(nextPlanStatus("ABANDONED")).toBeUndefined();
+  });
+});
+
+describe("planIdFromFilename", () => {
+  it("extracts the id from a canonical plan filename", () => {
+    expect(planIdFromFilename("2026-08-09-attendance-punch-sync.md")).toBe("attendance-punch-sync");
+  });
+
+  it("rejects filenames that do not match the plan shape", () => {
+    expect(planIdFromFilename("attendance-punch-sync.md")).toBeNull();
+    expect(planIdFromFilename("2026-08-09-attendance punch sync.md")).toBeNull();
+    expect(planIdFromFilename("2026-08-09-../escape.md")).toBeNull();
+    expect(planIdFromFilename("2026-08-09-attendance-punch-sync")).toBeNull();
+  });
+});
+
+describe("extractNextAction", () => {
+  const planWith = (body: string, trailing = ""): string =>
+    [
+      "# My Plan",
+      "",
+      "## Metadata",
+      "",
+      "- id: my-plan",
+      "- method: bug-fix",
+      "- status: PLANNED",
+      "- created: 2026-08-13",
+      "",
+      "## Next Action",
+      "",
+      body,
+      trailing,
+    ].join("\n");
+
+  it("extracts the trimmed next action text", () => {
+    expect(extractNextAction(planWith("Commit the verified change."))).toBe(
+      "Commit the verified change.",
+    );
+  });
+
+  it("extracts multi-line next actions", () => {
+    expect(extractNextAction(planWith("First line.\nSecond line."))).toBe(
+      "First line.\nSecond line.",
+    );
+  });
+
+  it("returns undefined when the section is empty", () => {
+    expect(extractNextAction(planWith(""))).toBeUndefined();
+  });
+
+  it("returns undefined when the section is absent", () => {
+    expect(
+      extractNextAction(
+        renderPlan({ id: "my-plan", method: "bug-fix" }, "2026-08-13").replace(
+          "## Next Action",
+          "## Done",
+        ),
+      ),
+    ).toBeUndefined();
+  });
+
+  it("stops at the next section heading", () => {
+    const content = planWith("Do the thing.", "## Done\n\n- check");
+    expect(extractNextAction(content)).toBe("Do the thing.");
   });
 });

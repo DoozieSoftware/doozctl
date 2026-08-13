@@ -90,6 +90,53 @@ function spyEngine() {
   return { engine, calls };
 }
 
+/** Adopt a workflow document into the temp repository's control plane. */
+async function adoptWorkflowForStatus(dir: string, id: string): Promise<void> {
+  const base = path.join(dir, ".dooz", "workflows", "adopted");
+  await mkdir(base, { recursive: true });
+  const content = [
+    `# ${id}`,
+    "",
+    "## Metadata",
+    "",
+    `- id: ${id}`,
+    "",
+    "## Purpose",
+    "",
+    "Test method.",
+  ].join("\n");
+  await writeFile(path.join(base, `${id}.md`), content, "utf-8");
+}
+
+/** Write a valid plan document into `.dooz/plans/active/` with the given state. */
+async function writeActivePlan(
+  dir: string,
+  plan: {
+    id: string;
+    method: string;
+    status: string;
+    created: string;
+    nextAction?: string;
+  },
+): Promise<void> {
+  const active = path.join(dir, ".dooz", "plans", "active");
+  await mkdir(active, { recursive: true });
+  const body = [
+    `# ${plan.id}`,
+    "",
+    "## Metadata",
+    "",
+    `- id: ${plan.id}`,
+    `- method: ${plan.method}`,
+    `- status: ${plan.status}`,
+    `- created: ${plan.created}`,
+  ];
+  if (plan.nextAction !== undefined) {
+    body.push("", "## Next Action", "", plan.nextAction);
+  }
+  await writeFile(path.join(active, `${plan.created}-${plan.id}.md`), body.join("\n"), "utf-8");
+}
+
 describe("App", () => {
   it("routes init through the full pipeline and prints a report", async () => {
     const { engine, calls } = spyEngine();
@@ -137,7 +184,6 @@ describe("App", () => {
     await (app.analyze as (args: string[]) => Promise<number>)([repo]);
     await (app.doctor as (args: string[]) => Promise<number>)([repo, pkg]);
     await app.summarize([repo, pkg, sessionFile]);
-    await (app.status as (args: string[]) => Promise<number>)([repo]);
     await app.sync([repo, pkg]);
 
     const executed = calls.map((c) => c.steps);
@@ -156,7 +202,6 @@ describe("App", () => {
         "validateStep",
         "writeStep",
       ],
-      ["analyzeStep", "reportStep"],
       [
         "loadStateStep",
         "loadStep",
@@ -319,16 +364,156 @@ describe("App", () => {
     expect(calls).toHaveLength(0);
   });
 
-  it("status prints a report about the repository", async () => {
+  it("status reports an uninitialized repository and guides the user", async () => {
+    const dir = await tmp();
+    const { deps, printed } = buildDeps();
+    const app = new App(new Engine(), deps);
+
+    await expect(app.status([dir])).resolves.toBe(1);
+    expect(printed.join("\n")).toContain("DoozCTL is not initialized in this repository.");
+    expect(printed.join("\n")).toContain("doozctl init <repository> <standards-package>");
+  });
+
+  it("status reports repository facts and no active plan", async () => {
     const dir = await tmp();
     await mkdir(path.join(dir, "src"), { recursive: true });
     await writeFile(path.join(dir, "src", "main.ts"), "export {};\n", "utf-8");
-
+    const pkg = await tmp();
+    await writePackage(pkg);
     const { deps, printed } = buildDeps();
     const app = new App(new Engine(), deps);
+    await app.init([dir, pkg]);
+
     await expect(app.status([dir])).resolves.toBe(0);
-    expect(printed.join("\n")).toContain("Repository: " + dir);
-    expect(printed.join("\n")).toContain("Languages: TypeScript");
+    const report = printed.join("\n");
+    expect(report).toContain("DoozCTL Status");
+    expect(report).toContain("Path: " + dir);
+    expect(report).toContain("Languages: TypeScript");
+    expect(report).toContain("Initialized: yes");
+    expect(report).toContain("Active Plan\n  None");
+    expect(report).toContain("doozctl plan --method <adopted-method>");
+  });
+
+  it("status shows the active plan, lifecycle progress and next action", async () => {
+    const dir = await tmp();
+    await adoptWorkflowForStatus(dir, "bug-fix");
+    const pkg = await tmp();
+    await writePackage(pkg);
+    const { deps, printed } = buildDeps();
+    const app = new App(new Engine(), deps);
+    await app.init([dir, pkg]);
+
+    await writeActivePlan(dir, {
+      id: "attendance-punch-sync",
+      method: "bug-fix",
+      status: "EXECUTING",
+      created: "2026-08-09",
+      nextAction: "Commit the verified change.",
+    });
+
+    await expect(app.status([dir])).resolves.toBe(0);
+    const report = printed.join("\n");
+    expect(report).toContain("ID: attendance-punch-sync");
+    expect(report).toContain("Method: bug-fix");
+    expect(report).toContain("Status: EXECUTING");
+    expect(report).toContain("Next: VERIFIED");
+    expect(report).toContain("Plan       ✓");
+    expect(report).toContain("Verify     ✗");
+    expect(report).toContain("Test       ✗");
+    expect(report).toContain("Next Action");
+    expect(report).toContain("Commit the verified change.");
+  });
+
+  it("status reports multiple active plans without selecting one", async () => {
+    const dir = await tmp();
+    const pkg = await tmp();
+    await writePackage(pkg);
+    const { deps, printed } = buildDeps();
+    const app = new App(new Engine(), deps);
+    await app.init([dir, pkg]);
+
+    await writeActivePlan(dir, {
+      id: "plan-a",
+      method: "bug-fix",
+      status: "EXECUTING",
+      created: "2026-08-09",
+    });
+    await writeActivePlan(dir, {
+      id: "plan-b",
+      method: "feature",
+      status: "PLANNED",
+      created: "2026-08-10",
+    });
+
+    await expect(app.status([dir])).resolves.toBe(1);
+    const report = printed.join("\n");
+    expect(report).toContain("Multiple active plans found:");
+    expect(report).toContain("plan-a — bug-fix (EXECUTING)");
+    expect(report).toContain("plan-b — feature (PLANNED)");
+    expect(report).toContain("Resolve the ambiguity before continuing.");
+  });
+
+  it("status reports a malformed active plan as a problem", async () => {
+    const dir = await tmp();
+    const pkg = await tmp();
+    await writePackage(pkg);
+    const { deps, printed } = buildDeps();
+    const app = new App(new Engine(), deps);
+    await app.init([dir, pkg]);
+
+    const active = path.join(dir, ".dooz", "plans", "active");
+    await mkdir(active, { recursive: true });
+    await writeFile(path.join(active, "2026-08-09-broken.md"), "# Broken\nno metadata\n", "utf-8");
+
+    await expect(app.status([dir])).resolves.toBe(1);
+    expect(printed.join("\n")).toContain("Plan broken is invalid:");
+  });
+
+  it("status reports a missing adopted workflow as a problem", async () => {
+    const dir = await tmp();
+    const pkg = await tmp();
+    await writePackage(pkg);
+    const { deps, printed } = buildDeps();
+    const app = new App(new Engine(), deps);
+    await app.init([dir, pkg]);
+
+    await writeActivePlan(dir, {
+      id: "attendance-punch-sync",
+      method: "bug-fix",
+      status: "EXECUTING",
+      created: "2026-08-09",
+    });
+
+    await expect(app.status([dir])).resolves.toBe(1);
+    expect(printed.join("\n")).toContain(
+      "Plan attendance-punch-sync requires workflow 'bug-fix', but that workflow is not adopted.",
+    );
+  });
+
+  it("status with no explicit next action says it is not specified", async () => {
+    const dir = await tmp();
+    await adoptWorkflowForStatus(dir, "feature");
+    const pkg = await tmp();
+    await writePackage(pkg);
+    const { deps, printed } = buildDeps();
+    const app = new App(new Engine(), deps);
+    await app.init([dir, pkg]);
+
+    await writeActivePlan(dir, {
+      id: "feature",
+      method: "feature",
+      status: "VERIFIED",
+      created: "2026-08-09",
+    });
+
+    await expect(app.status([dir])).resolves.toBe(0);
+    const report = printed.join("\n");
+    expect(report).toContain("Status: VERIFIED");
+    expect(report).toContain("Next: TESTED");
+    expect(report).toContain("Plan       ✓");
+    expect(report).toContain("Verify     ✓");
+    expect(report).toContain("Test       ✗");
+    expect(report).toContain("Next Action\n  Not specified.");
   });
 });
 

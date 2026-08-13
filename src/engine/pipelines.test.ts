@@ -4,7 +4,6 @@ import {
   analyzePipeline,
   doctorPipeline,
   initPipeline,
-  statusPipeline,
   summarizePipeline,
   syncPipeline,
 } from "./pipelines.js";
@@ -63,11 +62,6 @@ describe("command pipelines", () => {
   it("doctor verifies initialization, re-checks live state, reports, and never writes", () => {
     const steps = doctorPipeline(deps);
     expect(steps.map(fnOf)).toEqual(["loadStateStep", "loadStep", "analyzeStep", "reportStep"]);
-    expect(steps.map(fnOf)).not.toContain("writeStep");
-  });
-
-  it("status is read-only and never writes", () => {
-    const steps = statusPipeline(deps);
     expect(steps.map(fnOf)).not.toContain("writeStep");
   });
 

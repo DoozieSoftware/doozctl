@@ -534,23 +534,6 @@ describe("pipeline steps", () => {
     );
   });
 
-  it("status report step prints what DoozCTL understands about the repository", async () => {
-    const printed: string[] = [];
-    await runSteps(
-      [
-        async (c) => {
-          c.analysis = minimalAnalysis("/repo");
-        },
-        reportStep({ print: (m) => printed.push(m), store: new RepositoryStore() }, "status"),
-      ],
-      { root: "/repo" },
-    );
-    expect(printed).toHaveLength(1);
-    expect(printed[0]).toContain("Repository: /repo");
-    expect(printed[0]).toContain("Git: not a repository");
-    expect(printed[0]).toContain("Files: 0 total · 0 source · 0 test");
-  });
-
   it("doctor report step reports a healthy repository", async () => {
     const printed: string[] = [];
     const repo = await tmp();
@@ -586,7 +569,7 @@ describe("pipeline steps", () => {
             }),
           ];
         },
-        reportStep({ print: (m) => printed.push(m), store: new RepositoryStore() }, "doctor"),
+        reportStep({ print: (m) => printed.push(m), store: new RepositoryStore() }),
       ],
       { root: repo },
     );
@@ -612,7 +595,7 @@ describe("pipeline steps", () => {
             }),
           ];
         },
-        reportStep({ print: (m) => printed.push(m), store: new RepositoryStore() }, "doctor"),
+        reportStep({ print: (m) => printed.push(m), store: new RepositoryStore() }),
       ],
       { root: repo },
     );
@@ -638,7 +621,7 @@ describe("pipeline steps", () => {
             }),
           ];
         },
-        reportStep({ print: (m) => printed.push(m), store: new RepositoryStore() }, "doctor"),
+        reportStep({ print: (m) => printed.push(m), store: new RepositoryStore() }),
       ],
       { root: repo },
     );
@@ -668,7 +651,7 @@ describe("pipeline steps", () => {
             }),
           ];
         },
-        reportStep({ print: (m) => printed.push(m), store: new RepositoryStore() }, "doctor"),
+        reportStep({ print: (m) => printed.push(m), store: new RepositoryStore() }),
       ],
       { root: repo },
     );
@@ -695,7 +678,7 @@ describe("pipeline steps", () => {
             }),
           ];
         },
-        reportStep({ print: (m) => printed.push(m), store: new RepositoryStore() }, "doctor"),
+        reportStep({ print: (m) => printed.push(m), store: new RepositoryStore() }),
         async (c) => {
           problems = c.doctorProblems;
         },

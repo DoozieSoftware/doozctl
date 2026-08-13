@@ -22,7 +22,7 @@ import {
   resolveContextFields,
   resolveDestinationTemplate,
 } from "./session.js";
-import { buildDoctorReport, buildStatusReport } from "./report.js";
+import { buildDoctorReport } from "./report.js";
 import { resolveVariables } from "./variable-resolver.js";
 
 /**
@@ -461,9 +461,6 @@ export function saveAnalysisStep(deps: SaveAnalysisDeps): PipelineStep {
   });
 }
 
-/** Which read-only report to build. */
-export type ReportKind = "status" | "doctor";
-
 /** Dependencies for the report step. */
 export interface ReportDeps {
   print: (message: string) => void;
@@ -471,18 +468,11 @@ export interface ReportDeps {
 }
 
 /**
- * Report: produce a human-readable report for the read-only commands.
- *
- * status describes what DoozCTL understands about the repository (the
- * analysis); doctor validates the repository's health. Both print via the
- * injected printer and never write.
+ * Report: produce a human-readable health report for doctor. Prints via the
+ * injected printer and never writes.
  */
-export function reportStep(deps: ReportDeps, kind: ReportKind): PipelineStep {
+export function reportStep(deps: ReportDeps): PipelineStep {
   return named("report", async (ctx) => {
-    if (kind === "status") {
-      deps.print(buildStatusReport(ctx));
-      return;
-    }
     let manifest = ctx.manifest;
     if (manifest === null) {
       manifest = await readManifestOrNull(deps.store, ctx.root);

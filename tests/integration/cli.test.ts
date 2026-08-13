@@ -1,4 +1,5 @@
 import { Writable } from "node:stream";
+import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -31,8 +32,15 @@ afterAll(async () => {
 /** Create a temp repo and a temp Standards Package with one managed artifact. */
 async function makeRepoAndPackage(): Promise<{ repo: string; pkg: string }> {
   const repo = await mkdtemp(path.join(tmpdir(), "doozctl-cli-repo-"));
+  const pkg = await makeStandardsPackage();
+  tempDirs.push(repo);
+  return { repo, pkg };
+}
+
+/** A temp Standards Package declaring one managed-blocks artifact. */
+async function makeStandardsPackage(): Promise<string> {
   const pkg = await mkdtemp(path.join(tmpdir(), "doozctl-cli-pkg-"));
-  tempDirs.push(repo, pkg);
+  tempDirs.push(pkg);
   await writeFile(
     path.join(pkg, "package.json"),
     JSON.stringify({
@@ -64,7 +72,77 @@ async function makeRepoAndPackage(): Promise<{ repo: string; pkg: string }> {
       "<!-- DOOZCTL:END:v1 repository-analysis -->",
     ].join("\n"),
   );
-  return { repo, pkg };
+  return pkg;
+}
+
+/** Create a clean git repository with one committed file. */
+async function makeGitRepo(): Promise<string> {
+  const repo = await mkdtemp(path.join(tmpdir(), "doozctl-cli-git-"));
+  tempDirs.push(repo);
+  execFileSync("git", ["init", "-b", "main"], { cwd: repo, stdio: "ignore" });
+  execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: repo });
+  execFileSync("git", ["config", "user.name", "Test"], { cwd: repo });
+  await writeFile(path.join(repo, "seed.txt"), "hello\n");
+  execFileSync("git", ["add", "."], { cwd: repo });
+  execFileSync("git", ["commit", "-m", "init"], { cwd: repo, stdio: "ignore" });
+  return repo;
+}
+
+/** Adopt a workflow document into the repository's control plane. */
+async function adoptWorkflow(repo: string, id: string): Promise<void> {
+  const base = path.join(repo, ".dooz", "workflows", "adopted");
+  await mkdir(base, { recursive: true });
+  await writeFile(
+    path.join(base, `${id}.md`),
+    [`# ${id}`, "", "## Metadata", "", `- id: ${id}`, "", "## Purpose", "", "Test method."].join(
+      "\n",
+    ),
+    "utf-8",
+  );
+}
+
+/** Write a plan document into `.dooz/plans/active/`. */
+async function writePlanFile(
+  repo: string,
+  id: string,
+  method: string,
+  status: string,
+  nextAction?: string,
+  created = "2026-08-09",
+): Promise<void> {
+  const active = path.join(repo, ".dooz", "plans", "active");
+  await mkdir(active, { recursive: true });
+  const body = [
+    `# ${id}`,
+    "",
+    "## Metadata",
+    "",
+    `- id: ${id}`,
+    `- method: ${method}`,
+    `- status: ${status}`,
+    `- created: ${created}`,
+  ];
+  if (nextAction !== undefined) {
+    body.push("", "## Next Action", "", nextAction);
+  }
+  await writeFile(path.join(active, `${created}-${id}.md`), body.join("\n"), "utf-8");
+}
+
+/** Recursively snapshot every file's path and bytes for read-only proofs. */
+async function snapshotRepo(root: string): Promise<string> {
+  const entries: string[] = [];
+  const walk = async (dir: string): Promise<void> => {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await walk(full);
+      } else if (entry.isFile()) {
+        entries.push(`${full}:${await readFile(full)}`);
+      }
+    }
+  };
+  await walk(root);
+  return entries.sort().join("\n");
 }
 
 function buildDeps(): AppDeps {
@@ -209,7 +287,7 @@ describe("doozctl CLI (integration)", () => {
     expect(streams.err()).toContain("Usage:   doozctl doctor <repo> <package>");
   });
 
-  it("status prints an analysis report to stdout", async () => {
+  it("status on an uninitialized repository exits 1 with guidance", async () => {
     const { repo, pkg } = await makeRepoAndPackage();
     await mkdir(path.join(repo, "src"), { recursive: true });
     await writeFile(path.join(repo, "src", "main.ts"), "export {};\n");
@@ -222,9 +300,168 @@ describe("doozctl CLI (integration)", () => {
 
     const code = await runCli(["status", repo], dispatcher, streams);
 
+    expect(code).toBe(1);
+    expect(streams.out()).toContain("DoozCTL is not initialized in this repository.");
+    expect(streams.out()).toContain("doozctl init <repository> <standards-package>");
+  });
+
+  it("status prints the v2 control-plane view for an initialized repository", async () => {
+    const { repo, pkg } = await makeRepoAndPackage();
+    await mkdir(path.join(repo, "src"), { recursive: true });
+    await writeFile(path.join(repo, "src", "main.ts"), "export {};\n");
+    const streams = capture();
+    const app = new App(new Engine(), {
+      ...buildDeps(),
+      print: (message) => streams.stdout.write(message + "\n"),
+    });
+    const dispatcher = new Dispatcher()
+      .register("init", app.init.bind(app))
+      .register("status", app.status.bind(app));
+
+    await runCli(["init", repo, pkg], dispatcher, streams);
+    const code = await runCli(["status", repo], dispatcher, streams);
+
     expect(code).toBe(0);
-    expect(streams.out()).toContain("Repository: " + repo);
-    expect(streams.out()).toContain("Languages: TypeScript");
+    const out = streams.out();
+    expect(out).toContain("DoozCTL Status");
+    expect(out).toContain(`Path: ${path.resolve(repo)}`);
+    expect(out).toContain("Languages: TypeScript");
+    expect(out).toContain("Initialized: yes");
+    expect(out).toContain("Active Plan\n  None");
+    expect(out).toContain("doozctl plan --method <adopted-method>");
+  });
+
+  it("status reports an active plan's lifecycle and next action", async () => {
+    const { repo, pkg } = await makeRepoAndPackage();
+    await adoptWorkflow(repo, "bug-fix");
+    await writePlanFile(
+      repo,
+      "attendance-punch-sync",
+      "bug-fix",
+      "EXECUTING",
+      "Commit the verified change.",
+    );
+    const streams = capture();
+    const app = new App(new Engine(), {
+      ...buildDeps(),
+      print: (message) => streams.stdout.write(message + "\n"),
+    });
+    const dispatcher = new Dispatcher()
+      .register("init", app.init.bind(app))
+      .register("status", app.status.bind(app));
+
+    await runCli(["init", repo, pkg], dispatcher, streams);
+    const code = await runCli(["status", repo], dispatcher, streams);
+
+    expect(code).toBe(0);
+    const out = streams.out();
+    expect(out).toContain("ID: attendance-punch-sync");
+    expect(out).toContain("Method: bug-fix");
+    expect(out).toContain("Status: EXECUTING");
+    expect(out).toContain("Next: VERIFIED");
+    expect(out).toContain("Plan       ✓");
+    expect(out).toContain("Verify     ✗");
+    expect(out).toContain("Commit the verified change.");
+  });
+
+  it("status reports multiple active plans and exits 1", async () => {
+    const { repo, pkg } = await makeRepoAndPackage();
+    await writePlanFile(repo, "plan-a", "bug-fix", "EXECUTING");
+    await writePlanFile(repo, "plan-b", "feature", "PLANNED", undefined, "2026-08-10");
+    const streams = capture();
+    const app = new App(new Engine(), {
+      ...buildDeps(),
+      print: (message) => streams.stdout.write(message + "\n"),
+    });
+    const dispatcher = new Dispatcher()
+      .register("init", app.init.bind(app))
+      .register("status", app.status.bind(app));
+
+    await runCli(["init", repo, pkg], dispatcher, streams);
+    const code = await runCli(["status", repo], dispatcher, streams);
+
+    expect(code).toBe(1);
+    const out = streams.out();
+    expect(out).toContain("Multiple active plans found:");
+    expect(out).toContain("plan-a — bug-fix (EXECUTING)");
+    expect(out).toContain("plan-b — feature (PLANNED)");
+    expect(out).toContain("Resolve the ambiguity before continuing.");
+  });
+
+  it("status reports a missing adopted workflow and exits 1", async () => {
+    const { repo, pkg } = await makeRepoAndPackage();
+    await writePlanFile(repo, "attendance-punch-sync", "bug-fix", "EXECUTING");
+    const streams = capture();
+    const app = new App(new Engine(), {
+      ...buildDeps(),
+      print: (message) => streams.stdout.write(message + "\n"),
+    });
+    const dispatcher = new Dispatcher()
+      .register("init", app.init.bind(app))
+      .register("status", app.status.bind(app));
+
+    await runCli(["init", repo, pkg], dispatcher, streams);
+    const code = await runCli(["status", repo], dispatcher, streams);
+
+    expect(code).toBe(1);
+    expect(streams.out()).toContain(
+      "Plan attendance-punch-sync requires workflow 'bug-fix', but that workflow is not adopted.",
+    );
+  });
+
+  it("status reports git cleanliness for an initialized git repository", async () => {
+    const repo = await makeGitRepo();
+    const pkg = await makeStandardsPackage();
+    const streams = capture();
+    const app = new App(new Engine(), {
+      ...buildDeps(),
+      print: (message) => streams.stdout.write(message + "\n"),
+    });
+    const dispatcher = new Dispatcher()
+      .register("init", app.init.bind(app))
+      .register("status", app.status.bind(app));
+
+    await runCli(["init", repo, pkg], dispatcher, streams);
+    execFileSync("git", ["add", "."], { cwd: repo });
+    execFileSync("git", ["commit", "-m", "init output"], { cwd: repo, stdio: "ignore" });
+    const clean = await runCli(["status", repo], dispatcher, streams);
+
+    expect(clean).toBe(0);
+    expect(streams.out()).toContain("Branch: main");
+    expect(streams.out()).toContain("Git: clean");
+
+    // Dirty the working tree and status must report dirty.
+    await writeFile(path.join(repo, "dirty.txt"), "uncommitted\n");
+    const dirty = await runCli(["status", repo], dispatcher, streams);
+    expect(dirty).toBe(0);
+    expect(streams.out()).toContain("Git: dirty");
+  });
+
+  it("status never modifies the repository, even when run twice", async () => {
+    const repo = await makeGitRepo();
+    const pkg = await makeStandardsPackage();
+    await adoptWorkflow(repo, "bug-fix");
+    await writePlanFile(repo, "attendance-punch-sync", "bug-fix", "EXECUTING");
+    const streams = capture();
+    const app = new App(new Engine(), {
+      ...buildDeps(),
+      print: (message) => streams.stdout.write(message + "\n"),
+    });
+    const dispatcher = new Dispatcher()
+      .register("init", app.init.bind(app))
+      .register("status", app.status.bind(app));
+
+    await runCli(["init", repo, pkg], dispatcher, streams);
+    const before = await snapshotRepo(repo);
+
+    expect(await runCli(["status", repo], dispatcher, streams)).toBe(0);
+    const afterFirst = await snapshotRepo(repo);
+    expect(afterFirst).toBe(before);
+
+    expect(await runCli(["status", repo], dispatcher, streams)).toBe(0);
+    const afterSecond = await snapshotRepo(repo);
+    expect(afterSecond).toBe(before);
+    expect(afterSecond).toBe(afterFirst);
   });
 
   it("renders a deterministic help snapshot", async () => {
