@@ -26,6 +26,13 @@ doozctl init . ./standards
 
 Blocks are replaced by `doozctl sync`; everything outside them is preserved.
 
+## Workflow methods
+
+`workflows/` ships the five v2 workflow methods (`standard`, `feature`,
+`bug-fix`, `triage`, `investigation`) as Markdown assets. DoozCTL never knows
+these names; a repository adopts the ones it needs by copying them into
+`.dooz/workflows/adopted/` (see `docs/v2/WORKFLOW-SPEC.md`).
+
 ## Rolling your own package
 
 Copy this directory, edit `package.json` (keep `"format": 2`), add artifact

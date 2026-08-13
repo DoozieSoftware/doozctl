@@ -23,10 +23,10 @@ import { PlanStore } from "../store/plan-store.js";
 import { Storage } from "../store/storage.js";
 import {
   DEFAULT_METHOD,
-  listWorkflowMethodIds,
-  resolveWorkflowMethod,
-  type WorkflowMethod,
-} from "../workflows/methods.js";
+  isValidWorkflowMethodId,
+  resolveAdoptedWorkflow,
+  type AdoptedWorkflow,
+} from "../workflows/adoption.js";
 import { UsageError } from "../errors.js";
 import { ExitCode } from "../dispatcher/dispatcher.js";
 import { readFile } from "node:fs/promises";
@@ -216,14 +216,15 @@ export class App {
 
   /**
    * plan: create a repository-local engineering Plan under
-   * `.dooz/plans/active/`. The method comes from the frozen workflow assets
-   * (`standard` by default); the plan id is derived from --title when given,
-   * otherwise it is the method id. A collision never overwrites.
+   * `.dooz/plans/active/`. The method resolves through the repository's
+   * adopted workflows (`standard` by default) and must be adopted to succeed;
+   * the plan id is derived from --title when given, otherwise it is the method
+   * id. A collision never overwrites.
    */
   async plan(args: string[]): Promise<number> {
     const parsed = parsePlanArgs(args);
     const root = parsed.repo ?? ".";
-    const method = this.resolveMethod(parsed.method ?? DEFAULT_METHOD);
+    const method = await this.resolveWorkflow(root, parsed.method ?? DEFAULT_METHOD);
 
     const id = parsed.title === undefined ? method.id : kebabize(parsed.title);
     if (!isValidPlanId(id)) {
@@ -242,14 +243,23 @@ export class App {
     return ExitCode.OK;
   }
 
-  /** Resolve a workflow method id, mapping unknown ids to usage errors. */
-  private resolveMethod(methodId: string): WorkflowMethod {
+  /**
+   * Resolve a workflow method id against the repository control plane,
+   * mapping an unadopted or invalid id to a usage error.
+   */
+  private async resolveWorkflow(root: string, methodId: string): Promise<AdoptedWorkflow> {
+    if (!isValidWorkflowMethodId(methodId)) {
+      throw new UsageError(
+        `invalid plan method: ${methodId}. Workflow method ids are lowercase kebab-case (e.g. bug-fix).`,
+      );
+    }
     try {
-      return resolveWorkflowMethod(methodId);
+      return await resolveAdoptedWorkflow(root, methodId);
     } catch (error) {
-      if (error instanceof Error && error.message.startsWith("workflow method not found:")) {
+      if (error instanceof Error && error.message.startsWith("workflow method not adopted:")) {
         throw new UsageError(
-          `unknown plan method: ${methodId}. Available methods: ${listWorkflowMethodIds().join(", ")}`,
+          `unknown plan method: ${methodId} — the repository has not adopted this workflow. ` +
+            "Adopt it by adding .dooz/workflows/adopted/<id>.md or .dooz/workflows/project/<id>.md.",
         );
       }
       throw error;

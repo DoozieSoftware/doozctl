@@ -13,7 +13,8 @@
   "files": [
     "agent-instructions.md",
     "developers.md",
-    "README.md"
+    "README.md",
+    "workflows"
   ],
   "publishConfig": {
     "access": "public"

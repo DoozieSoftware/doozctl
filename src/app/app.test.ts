@@ -336,8 +336,27 @@ describe("App plan", () => {
   const active = (dir: string) => path.join(dir, ".dooz", "plans", "active");
   const listActive = async (dir: string): Promise<string[]> => readdir(active(dir)).catch(() => []);
 
+  /** A minimal valid workflow document declaring the given id. */
+  const workflowContent = (id: string): string =>
+    [`# ${id}`, "", "## Metadata", "", `- id: ${id}`, "", "## Purpose", "", "Test method."].join(
+      "\n",
+    );
+
+  /** Adopt a workflow document into the temp repository's control plane. */
+  const adoptWorkflow = async (
+    dir: string,
+    id: string,
+    place: "adopted" | "project" = "adopted",
+    content: string = workflowContent(id),
+  ): Promise<void> => {
+    const base = path.join(dir, ".dooz", "workflows", place);
+    await mkdir(base, { recursive: true });
+    await writeFile(path.join(base, `${id}.md`), content, "utf-8");
+  };
+
   it("creates a plan with the default method and a concise report", async () => {
     const dir = await tmp();
+    await adoptWorkflow(dir, "standard");
     const { deps, printed } = buildDeps();
     const app = new App(new Engine(), deps);
 
@@ -364,6 +383,7 @@ describe("App plan", () => {
 
   it("creates a plan with an explicit method", async () => {
     const dir = await tmp();
+    await adoptWorkflow(dir, "bug-fix");
     const app = new App(new Engine(), buildDeps().deps);
 
     await expect(app.plan([dir, "--method", "bug-fix"])).resolves.toBe(0);
@@ -374,6 +394,7 @@ describe("App plan", () => {
 
   it("accepts the --method=value flag form", async () => {
     const dir = await tmp();
+    await adoptWorkflow(dir, "feature");
     const app = new App(new Engine(), buildDeps().deps);
 
     await expect(app.plan([dir, "--method=feature"])).resolves.toBe(0);
@@ -384,6 +405,7 @@ describe("App plan", () => {
 
   it("derives the plan id from --title", async () => {
     const dir = await tmp();
+    await adoptWorkflow(dir, "bug-fix");
     const app = new App(new Engine(), buildDeps().deps);
 
     await expect(
@@ -396,8 +418,19 @@ describe("App plan", () => {
     expect(content).toContain("- method: bug-fix");
   });
 
-  it("rejects an unknown method with a usage error and writes nothing", async () => {
+  it("creates a plan using a project-local workflow", async () => {
     const dir = await tmp();
+    await adoptWorkflow(dir, "client-release", "project");
+    const app = new App(new Engine(), buildDeps().deps);
+
+    await expect(app.plan([dir, "--method", "client-release"])).resolves.toBe(0);
+    const content = await readFile(path.join(active(dir), "2026-08-09-client-release.md"), "utf-8");
+    expect(content).toContain("- method: client-release");
+  });
+
+  it("rejects an unadopted method with a usage error and writes nothing", async () => {
+    const dir = await tmp();
+    await adoptWorkflow(dir, "bug-fix");
     const app = new App(new Engine(), buildDeps().deps);
 
     await expect(app.plan([dir, "--method", "nope"])).rejects.toMatchObject({
@@ -408,8 +441,52 @@ describe("App plan", () => {
     expect(await listActive(dir)).toEqual([]);
   });
 
+  it("rejects the default method when it is not adopted", async () => {
+    const dir = await tmp();
+    await adoptWorkflow(dir, "bug-fix");
+    const app = new App(new Engine(), buildDeps().deps);
+
+    await expect(app.plan([dir])).rejects.toMatchObject({ name: "UsageError", exitCode: 2 });
+    await expect(app.plan([dir])).rejects.toThrow(/unknown plan method: standard/);
+  });
+
+  it("rejects an invalid method id as a usage error", async () => {
+    const dir = await tmp();
+    await adoptWorkflow(dir, "bug-fix");
+    const app = new App(new Engine(), buildDeps().deps);
+
+    await expect(app.plan([dir, "--method", "../escape"])).rejects.toMatchObject({
+      name: "UsageError",
+      exitCode: 2,
+    });
+    await expect(app.plan([dir, "--method", "../escape"])).rejects.toThrow(
+      /invalid plan method: \.\.\/escape/,
+    );
+    expect(await listActive(dir)).toEqual([]);
+  });
+
+  it("rejects a malformed adopted workflow without writing a plan", async () => {
+    const dir = await tmp();
+    await adoptWorkflow(dir, "standard", "adopted", "# Standard\n\nNo metadata here.");
+    const app = new App(new Engine(), buildDeps().deps);
+
+    await expect(app.plan([dir])).rejects.toThrow(/workflow method asset is malformed: standard/);
+    expect(await listActive(dir)).toEqual([]);
+  });
+
+  it("rejects a method adopted in both places without guessing", async () => {
+    const dir = await tmp();
+    await adoptWorkflow(dir, "standard", "adopted");
+    await adoptWorkflow(dir, "standard", "project");
+    const app = new App(new Engine(), buildDeps().deps);
+
+    await expect(app.plan([dir])).rejects.toThrow(/duplicate workflow method: standard/);
+    expect(await listActive(dir)).toEqual([]);
+  });
+
   it("rejects a title that cannot produce a valid plan id", async () => {
     const dir = await tmp();
+    await adoptWorkflow(dir, "standard");
     const app = new App(new Engine(), buildDeps().deps);
 
     await expect(app.plan([dir, "--title", "!!!"])).rejects.toMatchObject({
@@ -443,6 +520,7 @@ describe("App plan", () => {
 
   it("does not overwrite an existing plan and preserves the original file", async () => {
     const dir = await tmp();
+    await adoptWorkflow(dir, "standard");
     const app = new App(new Engine(), buildDeps().deps);
     await app.plan([dir]);
     const file = path.join(active(dir), "2026-08-09-standard.md");
@@ -455,6 +533,7 @@ describe("App plan", () => {
 
   it("sanitizes hostile titles into safe kebab-case ids inside .dooz", async () => {
     const dir = await tmp();
+    await adoptWorkflow(dir, "standard");
     const app = new App(new Engine(), buildDeps().deps);
 
     await expect(app.plan([dir, "--title", "../../../etc/passwd"])).resolves.toBe(0);
@@ -467,6 +546,7 @@ describe("App plan", () => {
 
   it("reports a write failure and writes nothing outside .dooz", async () => {
     const dir = await tmp();
+    await adoptWorkflow(dir, "standard");
     const app = new App(new Engine(), buildDeps().deps);
     await mkdir(path.join(dir, ".dooz", "plans"), { recursive: true });
     await writeFile(path.join(dir, ".dooz", "plans", "active"), "blocking file", "utf-8");

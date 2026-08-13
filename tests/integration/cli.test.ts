@@ -15,7 +15,7 @@ import {
 } from "../../src/engine/contracts.js";
 import { GitService } from "../../src/infra/git/git.js";
 import { RepositoryStore } from "../../src/store/repository-store.js";
-import { DEFAULT_METHOD, listWorkflowMethodIds } from "../../src/workflows/methods.js";
+import { DEFAULT_METHOD } from "../../src/workflows/adoption.js";
 
 /**
  * End-to-end smoke tests: exercise the full CLI wiring (composition root →
@@ -140,6 +140,23 @@ describe("doozctl CLI (integration)", () => {
     expect(await runCli(["analyze", repo], dispatcher)).toBe(0);
     expect(await runCli(["doctor", repo, pkg], dispatcher)).toBe(0);
     expect(await runCli(["status", repo], dispatcher)).toBe(0);
+    // plan requires an adopted workflow (the default method must be adopted).
+    await mkdir(path.join(repo, ".dooz", "workflows", "adopted"), { recursive: true });
+    await writeFile(
+      path.join(repo, ".dooz", "workflows", "adopted", "standard.md"),
+      [
+        "# Standard",
+        "",
+        "## Metadata",
+        "",
+        "- id: standard",
+        "",
+        "## Purpose",
+        "",
+        "Test method.",
+      ].join("\n"),
+      "utf-8",
+    );
     expect(await runCli(["plan", repo], dispatcher)).toBe(0);
 
     // summarize without a session file exits 2 with usage guidance.
@@ -214,7 +231,7 @@ describe("doozctl CLI (integration)", () => {
     const streams = capture();
     const code = await runCli(["--help"], buildDispatcher(), {
       ...streams,
-      help: { plan: planCommandHelp(listWorkflowMethodIds(), DEFAULT_METHOD) },
+      help: { plan: planCommandHelp(DEFAULT_METHOD) },
     });
     expect(code).toBe(0);
     expect(streams.out()).toMatchSnapshot();
@@ -296,17 +313,37 @@ describe("doozctl CLI (integration)", () => {
 });
 
 describe("doozctl plan (integration)", () => {
-  const planHelp = () => ({
-    plan: planCommandHelp(listWorkflowMethodIds(), DEFAULT_METHOD),
-  });
+  const planHelp = () => ({ plan: planCommandHelp(DEFAULT_METHOD) });
   const active = (dir: string) => path.join(dir, ".dooz", "plans", "active");
   const listActive = async (dir: string): Promise<string[]> => readdir(active(dir)).catch(() => []);
   /** A plan-only dispatcher whose app prints to the captured stdout. */
   const planDispatcher = (streams: { stdout: Writable }) =>
     buildDispatcher((message) => streams.stdout.write(message + "\n"));
+  /** Adopt a workflow document into the temp repository's control plane. */
+  const adoptWorkflow = async (
+    repo: string,
+    id: string,
+    place: "adopted" | "project" = "adopted",
+    content: string = [
+      `# ${id}`,
+      "",
+      "## Metadata",
+      "",
+      `- id: ${id}`,
+      "",
+      "## Purpose",
+      "",
+      "Test method.",
+    ].join("\n"),
+  ): Promise<void> => {
+    const base = path.join(repo, ".dooz", "workflows", place);
+    await mkdir(base, { recursive: true });
+    await writeFile(path.join(base, `${id}.md`), content, "utf-8");
+  };
 
   it("creates a valid plan at the right location with the default method", async () => {
     const repo = await mkdtemp(path.join(tmpdir(), "doozctl-plan-repo-"));
+    await adoptWorkflow(repo, "standard");
     tempDirs.push(repo);
     const streams = capture();
 
@@ -338,6 +375,7 @@ describe("doozctl plan (integration)", () => {
 
   it("creates a plan with an explicit method and the correct workflow body", async () => {
     const repo = await mkdtemp(path.join(tmpdir(), "doozctl-plan-repo-"));
+    await adoptWorkflow(repo, "bug-fix");
     tempDirs.push(repo);
     const streams = capture();
 
@@ -354,6 +392,7 @@ describe("doozctl plan (integration)", () => {
 
   it("does not overwrite a duplicate plan and exits non-zero", async () => {
     const repo = await mkdtemp(path.join(tmpdir(), "doozctl-plan-repo-"));
+    await adoptWorkflow(repo, "standard");
     tempDirs.push(repo);
     const streams = capture();
     const dispatcher = planDispatcher(streams);
@@ -373,6 +412,7 @@ describe("doozctl plan (integration)", () => {
 
   it("derives the id from a title and creates it under .dooz", async () => {
     const repo = await mkdtemp(path.join(tmpdir(), "doozctl-plan-repo-"));
+    await adoptWorkflow(repo, "feature");
     tempDirs.push(repo);
 
     const code = await runCli(
@@ -386,6 +426,7 @@ describe("doozctl plan (integration)", () => {
 
   it("cannot escape .dooz through a hostile title", async () => {
     const repo = await mkdtemp(path.join(tmpdir(), "doozctl-plan-repo-"));
+    await adoptWorkflow(repo, "standard");
     tempDirs.push(repo);
 
     const code = await runCli(["plan", repo, "--title", "../../../escape"], buildDispatcher());
@@ -404,8 +445,61 @@ describe("doozctl plan (integration)", () => {
     expect(await listActive(repo)).toEqual([]);
   });
 
+  it("rejects the unadopted default method with guidance", async () => {
+    const repo = await mkdtemp(path.join(tmpdir(), "doozctl-plan-repo-"));
+    await adoptWorkflow(repo, "bug-fix");
+    tempDirs.push(repo);
+    const streams = capture();
+
+    const code = await runCli(["plan", repo], buildDispatcher(), streams);
+    expect(code).toBe(2);
+    expect(streams.err()).toContain("unknown plan method: standard");
+    expect(streams.err()).toContain(".dooz/workflows/adopted/");
+    expect(await listActive(repo)).toEqual([]);
+  });
+
+  it("creates a plan using a project-local workflow", async () => {
+    const repo = await mkdtemp(path.join(tmpdir(), "doozctl-plan-repo-"));
+    await adoptWorkflow(repo, "client-release", "project");
+    tempDirs.push(repo);
+
+    const code = await runCli(
+      ["plan", repo, "--method", "client-release", "--title", "client release cut"],
+      buildDispatcher(),
+    );
+    expect(code).toBe(0);
+    const file = path.join(active(repo), "2026-08-09-client-release-cut.md");
+    expect(await readFile(file, "utf-8")).toContain("- method: client-release");
+  });
+
+  it("fails clearly on a method adopted in both places", async () => {
+    const repo = await mkdtemp(path.join(tmpdir(), "doozctl-plan-repo-"));
+    await adoptWorkflow(repo, "standard", "adopted");
+    await adoptWorkflow(repo, "standard", "project");
+    tempDirs.push(repo);
+    const streams = capture();
+
+    const code = await runCli(["plan", repo], buildDispatcher(), streams);
+    expect(code).toBe(1);
+    expect(streams.err()).toContain("Duplicate workflow method: standard");
+    expect(await listActive(repo)).toEqual([]);
+  });
+
+  it("fails clearly on an invalid adopted workflow document", async () => {
+    const repo = await mkdtemp(path.join(tmpdir(), "doozctl-plan-repo-"));
+    await adoptWorkflow(repo, "standard", "adopted", "# Standard\n\nNo metadata here.");
+    tempDirs.push(repo);
+    const streams = capture();
+
+    const code = await runCli(["plan", repo], buildDispatcher(), streams);
+    expect(code).toBe(1);
+    expect(streams.err()).toContain("Workflow method document is malformed: standard");
+    expect(await listActive(repo)).toEqual([]);
+  });
+
   it("is deterministic under repeated invocation", async () => {
     const repo = await mkdtemp(path.join(tmpdir(), "doozctl-plan-repo-"));
+    await adoptWorkflow(repo, "standard");
     tempDirs.push(repo);
     const dispatcher = buildDispatcher();
 
@@ -415,7 +509,7 @@ describe("doozctl plan (integration)", () => {
     expect(await readFile(file, "utf-8")).toContain("- status: PLANNED");
   });
 
-  it("documents the plan command in --help with methods and examples", async () => {
+  it("documents the plan command in --help with adoption and examples", async () => {
     const streams = capture();
     const code = await runCli(["plan", "--help"], buildDispatcher(), {
       ...streams,
@@ -424,9 +518,9 @@ describe("doozctl plan (integration)", () => {
     expect(code).toBe(0);
     expect(streams.out()).toContain("Create a repository-local engineering Plan");
     expect(streams.out()).toContain(".dooz/plans/active/");
-    expect(streams.out()).toContain(
-      "Methods: bug-fix, feature, investigation, standard, triage (default: standard)",
-    );
+    expect(streams.out()).toContain(".dooz/workflows/adopted/");
+    expect(streams.out()).toContain(".dooz/workflows/project/");
+    expect(streams.out()).toContain("(standard) is used");
     expect(streams.out()).toContain("doozctl plan --method bug-fix");
   });
 });

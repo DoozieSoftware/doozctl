@@ -75,11 +75,11 @@ const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
 };
 
 /**
- * Help for the plan command. The method list is injected from the workflow
- * assets so the CLI never hard-codes methods; the default method comes from
- * the frozen contract (WORKFLOW-SPEC.md).
+ * Help for the plan command. Methods are adopted per repository, so the help
+ * explains where they come from rather than listing them; the default method
+ * comes from the frozen contract (WORKFLOW-SPEC.md).
  */
-export function planCommandHelp(methods: readonly string[], defaultMethod: string): CommandHelp {
+export function planCommandHelp(defaultMethod: string): CommandHelp {
   return {
     description:
       "Create a repository-local engineering Plan (intent, context, workflow method, evidence) under .dooz/plans/.",
@@ -93,7 +93,10 @@ export function planCommandHelp(methods: readonly string[], defaultMethod: strin
       "done. Plans are created at PLANNED under .dooz/plans/active/ as",
       "YYYY-MM-DD-<id>.md and are never overwritten.",
       "",
-      `Methods: ${methods.join(", ")}${methods.includes(defaultMethod) ? ` (default: ${defaultMethod})` : ""}`,
+      "The method selects a workflow the repository has adopted:",
+      ".dooz/workflows/adopted/<id>.md (from a Standards Package) or a project-",
+      "specific .dooz/workflows/project/<id>.md. Without --method, the default",
+      `method (${defaultMethod}) is used.`,
       "",
       "Usage: doozctl plan [repo] [--method <method>] [--title <title>]",
       "",
@@ -154,6 +157,22 @@ export function humanizeError(error: unknown): string {
     return [
       `Plan already exists: ${id} — left untouched. DoozCTL never overwrites a plan.`,
       "Pass --title with a distinct name to create a separate plan.",
+    ].join("\n");
+  }
+
+  if (message.startsWith("duplicate workflow method:")) {
+    const id = message.slice("duplicate workflow method:".length).trim();
+    return [
+      `Duplicate workflow method: ${id} — defined in both .dooz/workflows/adopted/ and .dooz/workflows/project/.`,
+      "Adopt a method id in exactly one place. Remove one of the documents, then run the command again.",
+    ].join("\n");
+  }
+
+  if (message.startsWith("workflow method asset is malformed:")) {
+    const id = message.slice("workflow method asset is malformed:".length).trim();
+    return [
+      `Workflow method document is malformed: ${id}.`,
+      "Every workflow document must declare `- id: <method-id>` inside its `## Metadata` section.",
     ].join("\n");
   }
 

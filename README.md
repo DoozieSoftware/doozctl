@@ -99,6 +99,12 @@ doozctl status [repo]                         # show what DoozCTL understands
 doozctl plan [--method <method>] [--title <title>]  # create an engineering Plan under .dooz/plans/
 ```
 
+`plan` resolves `--method` against the workflows the repository has adopted
+under `.dooz/workflows/adopted/` (from a Standards Package) or
+`.dooz/workflows/project/`; the default method is `standard`, and it too must
+be adopted. The sample Standards Package ships the five initial methods in
+`standards/workflows/`.
+
 Every command supports `--help` with usage and an example.
 
 ## Exit codes

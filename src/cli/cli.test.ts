@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Writable } from "node:stream";
 import { Dispatcher, ExitCode } from "../dispatcher/dispatcher.js";
 import { UsageError } from "../errors.js";
-import { DEFAULT_METHOD, listWorkflowMethodIds } from "../workflows/methods.js";
+import { DEFAULT_METHOD } from "../workflows/adoption.js";
 import { buildProgram, humanizeError, planCommandHelp, runCli, VERSION } from "./cli.js";
 
 function capture(): { stdout: Writable; stderr: Writable; out: () => string; err: () => string } {
@@ -47,26 +47,28 @@ describe("buildProgram", () => {
 });
 
 describe("planCommandHelp", () => {
-  it("explains what a plan is, where it is stored, the methods, and examples", () => {
-    const help = planCommandHelp(listWorkflowMethodIds(), DEFAULT_METHOD);
+  it("explains what a plan is, where it is stored, adoption, and examples", () => {
+    const help = planCommandHelp(DEFAULT_METHOD);
     expect(help.description).toContain("Plan");
     expect(help.helpText).toContain(".dooz/plans/active/");
-    expect(help.helpText).toContain("Methods: bug-fix, feature, investigation, standard, triage");
-    expect(help.helpText).toContain("(default: standard)");
+    expect(help.helpText).toContain(".dooz/workflows/adopted/");
+    expect(help.helpText).toContain(".dooz/workflows/project/");
+    expect(help.helpText).toContain("(standard) is used");
     expect(help.helpText).toContain("doozctl plan");
     expect(help.helpText).toContain("doozctl plan --method bug-fix");
   });
 
-  it("renders plan help through the CLI with the available methods", async () => {
+  it("renders plan help through the CLI without a hard-coded method list", async () => {
     const streams = capture();
     const d = new Dispatcher().register("plan", async () => ExitCode.OK);
     const code = await runCli(["plan", "--help"], d, {
       ...streams,
-      help: { plan: planCommandHelp(listWorkflowMethodIds(), DEFAULT_METHOD) },
+      help: { plan: planCommandHelp(DEFAULT_METHOD) },
     });
     expect(code).toBe(ExitCode.OK);
     expect(streams.out()).toContain("Create a repository-local engineering Plan");
-    expect(streams.out()).toContain("Methods: bug-fix, feature, investigation, standard, triage");
+    expect(streams.out()).toContain(".dooz/workflows/adopted/");
+    expect(streams.out()).toContain("doozctl plan --method bug-fix");
   });
 });
 
@@ -102,6 +104,21 @@ describe("humanizeError", () => {
     expect(message).toContain("Plan already exists: standard");
     expect(message).toContain("left untouched");
     expect(message).toContain("--title");
+  });
+
+  it("rewrites a duplicate workflow method with guidance", () => {
+    const message = humanizeError(
+      new Error("duplicate workflow method: feature (adopted/ and project/ both define it)"),
+    );
+    expect(message).toContain("Duplicate workflow method: feature");
+    expect(message).toContain(".dooz/workflows/adopted/");
+    expect(message).toContain(".dooz/workflows/project/");
+  });
+
+  it("rewrites a malformed workflow document with guidance", () => {
+    const message = humanizeError(new Error("workflow method asset is malformed: bug-fix"));
+    expect(message).toContain("Workflow method document is malformed: bug-fix");
+    expect(message).toContain("- id: <method-id>");
   });
 });
 

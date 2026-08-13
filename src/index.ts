@@ -27,7 +27,7 @@ import {
 } from "./engine/contracts.js";
 import { GitService } from "./infra/git/git.js";
 import { RepositoryStore } from "./store/repository-store.js";
-import { DEFAULT_METHOD, listWorkflowMethodIds } from "./workflows/methods.js";
+import { DEFAULT_METHOD } from "./workflows/adoption.js";
 
 function buildDeps(): AppDeps {
   const git = new GitService();
@@ -54,9 +54,9 @@ function registerCommands(dispatcher: Dispatcher, app: App): void {
     .register("plan", app.plan.bind(app));
 }
 
-/** Help overrides: the plan command sources its method list from the assets. */
+/** Help overrides: the plan command sources its default method from the contract. */
 function helpOverrides(): Readonly<Record<string, CommandHelp>> {
-  return { plan: planCommandHelp(listWorkflowMethodIds(), DEFAULT_METHOD) };
+  return { plan: planCommandHelp(DEFAULT_METHOD) };
 }
 
 async function main(): Promise<number> {
