@@ -96,6 +96,7 @@ doozctl analyze [repo]                        # update repository analysis only
 doozctl summarize <repo> <package> <session>  # append an immutable session summary
 doozctl doctor <repo> <package>               # verify repository health
 doozctl status [repo]                         # show what DoozCTL understands
+doozctl plan [--method <method>] [--title <title>]  # create an engineering Plan under .dooz/plans/
 ```
 
 Every command supports `--help` with usage and an example.

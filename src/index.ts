@@ -9,7 +9,13 @@
  */
 import { CommanderError } from "commander";
 import { App, type AppDeps } from "./app/app.js";
-import { buildProgram, ExitCodeError, humanizeError } from "./cli/cli.js";
+import {
+  buildProgram,
+  ExitCodeError,
+  humanizeError,
+  planCommandHelp,
+  type CommandHelp,
+} from "./cli/cli.js";
 import { Dispatcher, ExitCode } from "./dispatcher/dispatcher.js";
 import { UsageError } from "./errors.js";
 import { Engine } from "./engine/engine.js";
@@ -21,6 +27,7 @@ import {
 } from "./engine/contracts.js";
 import { GitService } from "./infra/git/git.js";
 import { RepositoryStore } from "./store/repository-store.js";
+import { DEFAULT_METHOD, listWorkflowMethodIds } from "./workflows/methods.js";
 
 function buildDeps(): AppDeps {
   const git = new GitService();
@@ -43,14 +50,20 @@ function registerCommands(dispatcher: Dispatcher, app: App): void {
     .register("sync", app.sync.bind(app))
     .register("doctor", app.doctor.bind(app))
     .register("summarize", app.summarize.bind(app))
-    .register("status", app.status.bind(app));
+    .register("status", app.status.bind(app))
+    .register("plan", app.plan.bind(app));
+}
+
+/** Help overrides: the plan command sources its method list from the assets. */
+function helpOverrides(): Readonly<Record<string, CommandHelp>> {
+  return { plan: planCommandHelp(listWorkflowMethodIds(), DEFAULT_METHOD) };
 }
 
 async function main(): Promise<number> {
   const dispatcher = new Dispatcher();
   registerCommands(dispatcher, new App(new Engine(), buildDeps()));
 
-  const program = buildProgram(dispatcher);
+  const program = buildProgram(dispatcher, process.stdout, process.stderr, helpOverrides());
   try {
     if (process.argv.length <= 2) {
       program.help();

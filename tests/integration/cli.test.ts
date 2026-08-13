@@ -1,10 +1,10 @@
 import { Writable } from "node:stream";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { App, type AppDeps } from "../../src/app/app.js";
-import { runCli } from "../../src/cli/cli.js";
+import { planCommandHelp, runCli } from "../../src/cli/cli.js";
 import { Dispatcher } from "../../src/dispatcher/dispatcher.js";
 import { Engine } from "../../src/engine/engine.js";
 import {
@@ -15,6 +15,7 @@ import {
 } from "../../src/engine/contracts.js";
 import { GitService } from "../../src/infra/git/git.js";
 import { RepositoryStore } from "../../src/store/repository-store.js";
+import { DEFAULT_METHOD, listWorkflowMethodIds } from "../../src/workflows/methods.js";
 
 /**
  * End-to-end smoke tests: exercise the full CLI wiring (composition root →
@@ -80,15 +81,16 @@ function buildDeps(): AppDeps {
   };
 }
 
-function buildDispatcher(): Dispatcher {
-  const app = new App(new Engine(), buildDeps());
+function buildDispatcher(print: (message: string) => void = () => {}): Dispatcher {
+  const app = new App(new Engine(), { ...buildDeps(), print });
   return new Dispatcher()
     .register("init", app.init.bind(app))
     .register("analyze", app.analyze.bind(app))
     .register("sync", app.sync.bind(app))
     .register("doctor", app.doctor.bind(app))
     .register("summarize", app.summarize.bind(app))
-    .register("status", app.status.bind(app));
+    .register("status", app.status.bind(app))
+    .register("plan", app.plan.bind(app));
 }
 
 /** Captures stdout/stderr writes for assertions. */
@@ -116,11 +118,12 @@ function capture(): { stdout: Writable; stderr: Writable; out: () => string; err
 }
 
 describe("doozctl CLI (integration)", () => {
-  it("exposes the six core commands", () => {
+  it("exposes the seven core commands", () => {
     expect(buildDispatcher().commands()).toEqual([
       "analyze",
       "doctor",
       "init",
+      "plan",
       "status",
       "summarize",
       "sync",
@@ -137,6 +140,7 @@ describe("doozctl CLI (integration)", () => {
     expect(await runCli(["analyze", repo], dispatcher)).toBe(0);
     expect(await runCli(["doctor", repo, pkg], dispatcher)).toBe(0);
     expect(await runCli(["status", repo], dispatcher)).toBe(0);
+    expect(await runCli(["plan", repo], dispatcher)).toBe(0);
 
     // summarize without a session file exits 2 with usage guidance.
     expect(await runCli(["summarize", repo, pkg], dispatcher)).toBe(2);
@@ -208,7 +212,10 @@ describe("doozctl CLI (integration)", () => {
 
   it("renders a deterministic help snapshot", async () => {
     const streams = capture();
-    const code = await runCli(["--help"], buildDispatcher(), streams);
+    const code = await runCli(["--help"], buildDispatcher(), {
+      ...streams,
+      help: { plan: planCommandHelp(listWorkflowMethodIds(), DEFAULT_METHOD) },
+    });
     expect(code).toBe(0);
     expect(streams.out()).toMatchSnapshot();
   });
@@ -285,5 +292,141 @@ describe("doozctl CLI (integration)", () => {
     expect(code).toBe(1);
     expect(streams.err()).toContain("Standards package not found");
     expect(streams.err()).toContain("Pass a directory that contains a standards package");
+  });
+});
+
+describe("doozctl plan (integration)", () => {
+  const planHelp = () => ({
+    plan: planCommandHelp(listWorkflowMethodIds(), DEFAULT_METHOD),
+  });
+  const active = (dir: string) => path.join(dir, ".dooz", "plans", "active");
+  const listActive = async (dir: string): Promise<string[]> => readdir(active(dir)).catch(() => []);
+  /** A plan-only dispatcher whose app prints to the captured stdout. */
+  const planDispatcher = (streams: { stdout: Writable }) =>
+    buildDispatcher((message) => streams.stdout.write(message + "\n"));
+
+  it("creates a valid plan at the right location with the default method", async () => {
+    const repo = await mkdtemp(path.join(tmpdir(), "doozctl-plan-repo-"));
+    tempDirs.push(repo);
+    const streams = capture();
+
+    const code = await runCli(["plan", repo], planDispatcher(streams), {
+      ...streams,
+      help: planHelp(),
+    });
+
+    expect(code).toBe(0);
+    expect(streams.out()).toContain("Created plan:");
+    expect(streams.out()).toContain("ID: standard");
+    expect(streams.out()).toContain("Path: .dooz/plans/active/2026-08-09-standard.md");
+
+    const file = path.join(active(repo), "2026-08-09-standard.md");
+    const content = await readFile(file, "utf-8");
+    expect(content).toContain("# Standard");
+    expect(content).toContain("- id: standard");
+    expect(content).toContain("- method: standard");
+    expect(content).toContain("- status: PLANNED");
+    expect(content).toContain("- created: 2026-08-09");
+    // Canonical workflow body from the frozen template.
+    expect(content).toContain("## Objective");
+    expect(content).toContain("## Context");
+    expect(content).toContain("## Scope");
+    expect(content).toContain("## Acceptance Criteria");
+    expect(content).toContain("## Plan");
+    expect(content).toContain("## Verification");
+  });
+
+  it("creates a plan with an explicit method and the correct workflow body", async () => {
+    const repo = await mkdtemp(path.join(tmpdir(), "doozctl-plan-repo-"));
+    tempDirs.push(repo);
+    const streams = capture();
+
+    const code = await runCli(["plan", repo, "--method", "bug-fix"], planDispatcher(streams), {
+      help: planHelp(),
+    });
+
+    expect(code).toBe(0);
+    const file = path.join(active(repo), "2026-08-09-bug-fix.md");
+    const content = await readFile(file, "utf-8");
+    expect(content).toContain("- method: bug-fix");
+    expect(content).toContain("## Next Action");
+  });
+
+  it("does not overwrite a duplicate plan and exits non-zero", async () => {
+    const repo = await mkdtemp(path.join(tmpdir(), "doozctl-plan-repo-"));
+    tempDirs.push(repo);
+    const streams = capture();
+    const dispatcher = planDispatcher(streams);
+
+    expect(await runCli(["plan", repo], dispatcher)).toBe(0);
+    const file = path.join(active(repo), "2026-08-09-standard.md");
+    const before = await readFile(file, "utf-8");
+
+    const second = capture();
+    const code = await runCli(["plan", repo], planDispatcher(second), second);
+    expect(code).toBe(1);
+    expect(second.err()).toContain("Plan already exists: standard");
+    expect(second.err()).toContain("left untouched");
+    expect(await readFile(file, "utf-8")).toBe(before);
+    expect(await listActive(repo)).toEqual(["2026-08-09-standard.md"]);
+  });
+
+  it("derives the id from a title and creates it under .dooz", async () => {
+    const repo = await mkdtemp(path.join(tmpdir(), "doozctl-plan-repo-"));
+    tempDirs.push(repo);
+
+    const code = await runCli(
+      ["plan", repo, "--method", "feature", "--title", "attendance punch sync"],
+      buildDispatcher(),
+    );
+    expect(code).toBe(0);
+    const file = path.join(active(repo), "2026-08-09-attendance-punch-sync.md");
+    expect(await readFile(file, "utf-8")).toContain("# attendance punch sync");
+  });
+
+  it("cannot escape .dooz through a hostile title", async () => {
+    const repo = await mkdtemp(path.join(tmpdir(), "doozctl-plan-repo-"));
+    tempDirs.push(repo);
+
+    const code = await runCli(["plan", repo, "--title", "../../../escape"], buildDispatcher());
+    expect(code).toBe(0);
+    expect(await listActive(repo)).toEqual(["2026-08-09-escape.md"]);
+  });
+
+  it("rejects an invalid method with a usage error and exits 2", async () => {
+    const repo = await mkdtemp(path.join(tmpdir(), "doozctl-plan-repo-"));
+    tempDirs.push(repo);
+    const streams = capture();
+
+    const code = await runCli(["plan", repo, "--method", "nope"], buildDispatcher(), streams);
+    expect(code).toBe(2);
+    expect(streams.err()).toContain("unknown plan method: nope");
+    expect(await listActive(repo)).toEqual([]);
+  });
+
+  it("is deterministic under repeated invocation", async () => {
+    const repo = await mkdtemp(path.join(tmpdir(), "doozctl-plan-repo-"));
+    tempDirs.push(repo);
+    const dispatcher = buildDispatcher();
+
+    expect(await runCli(["plan", repo], dispatcher)).toBe(0);
+    expect(await runCli(["plan", repo], dispatcher)).toBe(1);
+    const file = path.join(active(repo), "2026-08-09-standard.md");
+    expect(await readFile(file, "utf-8")).toContain("- status: PLANNED");
+  });
+
+  it("documents the plan command in --help with methods and examples", async () => {
+    const streams = capture();
+    const code = await runCli(["plan", "--help"], buildDispatcher(), {
+      ...streams,
+      help: planHelp(),
+    });
+    expect(code).toBe(0);
+    expect(streams.out()).toContain("Create a repository-local engineering Plan");
+    expect(streams.out()).toContain(".dooz/plans/active/");
+    expect(streams.out()).toContain(
+      "Methods: bug-fix, feature, investigation, standard, triage (default: standard)",
+    );
+    expect(streams.out()).toContain("doozctl plan --method bug-fix");
   });
 });

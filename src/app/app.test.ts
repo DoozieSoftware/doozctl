@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -329,5 +329,149 @@ describe("App", () => {
     await expect(app.status([dir])).resolves.toBe(0);
     expect(printed.join("\n")).toContain("Repository: " + dir);
     expect(printed.join("\n")).toContain("Languages: TypeScript");
+  });
+});
+
+describe("App plan", () => {
+  const active = (dir: string) => path.join(dir, ".dooz", "plans", "active");
+  const listActive = async (dir: string): Promise<string[]> => readdir(active(dir)).catch(() => []);
+
+  it("creates a plan with the default method and a concise report", async () => {
+    const dir = await tmp();
+    const { deps, printed } = buildDeps();
+    const app = new App(new Engine(), deps);
+
+    const code = await app.plan([dir]);
+
+    expect(code).toBe(0);
+    const report = printed.join("\n");
+    expect(report).toContain("Created plan:");
+    expect(report).toContain("ID: standard");
+    expect(report).toContain("Method: standard");
+    expect(report).toContain("Status: PLANNED");
+    expect(report).toContain("Path: .dooz/plans/active/2026-08-09-standard.md");
+
+    const file = path.join(active(dir), "2026-08-09-standard.md");
+    const content = await readFile(file, "utf-8");
+    expect(content).toContain("# Standard");
+    expect(content).toContain("- id: standard");
+    expect(content).toContain("- method: standard");
+    expect(content).toContain("- status: PLANNED");
+    expect(content).toContain("- created: 2026-08-09");
+    expect(content).toContain("## Objective");
+    expect(content).toContain("## Acceptance Criteria");
+  });
+
+  it("creates a plan with an explicit method", async () => {
+    const dir = await tmp();
+    const app = new App(new Engine(), buildDeps().deps);
+
+    await expect(app.plan([dir, "--method", "bug-fix"])).resolves.toBe(0);
+    const content = await readFile(path.join(active(dir), "2026-08-09-bug-fix.md"), "utf-8");
+    expect(content).toContain("- id: bug-fix");
+    expect(content).toContain("- method: bug-fix");
+  });
+
+  it("accepts the --method=value flag form", async () => {
+    const dir = await tmp();
+    const app = new App(new Engine(), buildDeps().deps);
+
+    await expect(app.plan([dir, "--method=feature"])).resolves.toBe(0);
+    expect(await readFile(path.join(active(dir), "2026-08-09-feature.md"), "utf-8")).toContain(
+      "- method: feature",
+    );
+  });
+
+  it("derives the plan id from --title", async () => {
+    const dir = await tmp();
+    const app = new App(new Engine(), buildDeps().deps);
+
+    await expect(
+      app.plan([dir, "--method", "bug-fix", "--title", "attendance punch sync"]),
+    ).resolves.toBe(0);
+    const file = path.join(active(dir), "2026-08-09-attendance-punch-sync.md");
+    const content = await readFile(file, "utf-8");
+    expect(content).toContain("# attendance punch sync");
+    expect(content).toContain("- id: attendance-punch-sync");
+    expect(content).toContain("- method: bug-fix");
+  });
+
+  it("rejects an unknown method with a usage error and writes nothing", async () => {
+    const dir = await tmp();
+    const app = new App(new Engine(), buildDeps().deps);
+
+    await expect(app.plan([dir, "--method", "nope"])).rejects.toMatchObject({
+      name: "UsageError",
+      exitCode: 2,
+    });
+    await expect(app.plan([dir, "--method", "nope"])).rejects.toThrow(/unknown plan method: nope/);
+    expect(await listActive(dir)).toEqual([]);
+  });
+
+  it("rejects a title that cannot produce a valid plan id", async () => {
+    const dir = await tmp();
+    const app = new App(new Engine(), buildDeps().deps);
+
+    await expect(app.plan([dir, "--title", "!!!"])).rejects.toMatchObject({
+      name: "UsageError",
+      exitCode: 2,
+    });
+    await expect(app.plan([dir, "--title", "!!!"])).rejects.toThrow(
+      /--title must produce a valid plan id/,
+    );
+    expect(await listActive(dir)).toEqual([]);
+  });
+
+  it("rejects a flag without a value", async () => {
+    const dir = await tmp();
+    const app = new App(new Engine(), buildDeps().deps);
+    await expect(app.plan([dir, "--method"])).rejects.toThrow(/--method requires a value/);
+    await expect(app.plan([dir, "--title"])).rejects.toThrow(/--title requires a value/);
+  });
+
+  it("rejects unknown options", async () => {
+    const dir = await tmp();
+    const app = new App(new Engine(), buildDeps().deps);
+    await expect(app.plan([dir, "--bogus"])).rejects.toThrow(/unknown option: --bogus/);
+  });
+
+  it("rejects more than one positional argument", async () => {
+    const dir = await tmp();
+    const app = new App(new Engine(), buildDeps().deps);
+    await expect(app.plan([dir, "/other"])).rejects.toThrow(/Usage:\s+doozctl plan/);
+  });
+
+  it("does not overwrite an existing plan and preserves the original file", async () => {
+    const dir = await tmp();
+    const app = new App(new Engine(), buildDeps().deps);
+    await app.plan([dir]);
+    const file = path.join(active(dir), "2026-08-09-standard.md");
+    const before = await readFile(file, "utf-8");
+
+    await expect(app.plan([dir])).rejects.toThrow(/plan already exists: standard/);
+    expect(await readFile(file, "utf-8")).toBe(before);
+    expect(await listActive(dir)).toEqual(["2026-08-09-standard.md"]);
+  });
+
+  it("sanitizes hostile titles into safe kebab-case ids inside .dooz", async () => {
+    const dir = await tmp();
+    const app = new App(new Engine(), buildDeps().deps);
+
+    await expect(app.plan([dir, "--title", "../../../etc/passwd"])).resolves.toBe(0);
+    const entries = await listActive(dir);
+    expect(entries).toEqual(["2026-08-09-etc-passwd.md"]);
+    expect(await readFile(path.join(active(dir), entries[0] as string), "utf-8")).toContain(
+      "- id: etc-passwd",
+    );
+  });
+
+  it("reports a write failure and writes nothing outside .dooz", async () => {
+    const dir = await tmp();
+    const app = new App(new Engine(), buildDeps().deps);
+    await mkdir(path.join(dir, ".dooz", "plans"), { recursive: true });
+    await writeFile(path.join(dir, ".dooz", "plans", "active"), "blocking file", "utf-8");
+
+    await expect(app.plan([dir])).rejects.toThrow();
+    expect(await readdir(path.join(dir, ".dooz", "plans"))).toEqual(["active"]);
   });
 });

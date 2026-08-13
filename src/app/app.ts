@@ -17,8 +17,16 @@ import {
   syncPipeline,
 } from "../engine/pipelines.js";
 import { formatSessionId, toLocalIso } from "../engine/session.js";
+import { isValidPlanId, planFilename, type Plan } from "../model/plan.js";
 import type { SessionInput } from "../model/model.js";
+import { PlanStore } from "../store/plan-store.js";
 import { Storage } from "../store/storage.js";
+import {
+  DEFAULT_METHOD,
+  listWorkflowMethodIds,
+  resolveWorkflowMethod,
+  type WorkflowMethod,
+} from "../workflows/methods.js";
 import { UsageError } from "../errors.js";
 import { ExitCode } from "../dispatcher/dispatcher.js";
 import { readFile } from "node:fs/promises";
@@ -51,10 +59,12 @@ export interface AppDeps
 export class App {
   private readonly engine: Engine;
   private readonly deps: AppDeps;
+  private readonly planStore: PlanStore;
 
   constructor(engine: Engine, deps: AppDeps) {
     this.engine = engine;
     this.deps = deps;
+    this.planStore = new PlanStore({ now: deps.now });
   }
 
   /** init: run the full pipeline, create the manifest, and report success. */
@@ -204,6 +214,59 @@ export class App {
     return ExitCode.OK;
   }
 
+  /**
+   * plan: create a repository-local engineering Plan under
+   * `.dooz/plans/active/`. The method comes from the frozen workflow assets
+   * (`standard` by default); the plan id is derived from --title when given,
+   * otherwise it is the method id. A collision never overwrites.
+   */
+  async plan(args: string[]): Promise<number> {
+    const parsed = parsePlanArgs(args);
+    const root = parsed.repo ?? ".";
+    const method = this.resolveMethod(parsed.method ?? DEFAULT_METHOD);
+
+    const id = parsed.title === undefined ? method.id : kebabize(parsed.title);
+    if (!isValidPlanId(id)) {
+      throw new UsageError(
+        '--title must produce a valid plan id (lowercase kebab-case). Example: --title "attendance punch sync" creates id attendance-punch-sync.',
+      );
+    }
+
+    const plan = await this.planStore.create(
+      root,
+      parsed.title === undefined
+        ? { id, method: method.id }
+        : { id, method: method.id, title: parsed.title },
+    );
+    this.deps.print(this.formatPlanReport(plan));
+    return ExitCode.OK;
+  }
+
+  /** Resolve a workflow method id, mapping unknown ids to usage errors. */
+  private resolveMethod(methodId: string): WorkflowMethod {
+    try {
+      return resolveWorkflowMethod(methodId);
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("workflow method not found:")) {
+        throw new UsageError(
+          `unknown plan method: ${methodId}. Available methods: ${listWorkflowMethodIds().join(", ")}`,
+        );
+      }
+      throw error;
+    }
+  }
+
+  /** The concise creation report printed to the user. */
+  private formatPlanReport(plan: Plan): string {
+    return [
+      "Created plan:",
+      `  ID: ${plan.id}`,
+      `  Method: ${plan.method}`,
+      `  Status: ${plan.status}`,
+      `  Path: .dooz/plans/active/${planFilename(plan.created, plan.id)}`,
+    ].join("\n");
+  }
+
   private async run(steps: PipelineStep[], args: string[]): Promise<ExecutionContext> {
     return this.engine.run({ root: args[0] ?? ".", standardsDir: args[1] ?? "" }, steps);
   }
@@ -289,6 +352,64 @@ const SUMMARIZE_USAGE = [
   "Usage:   doozctl summarize <repo> <package> <session-file> [--tool <tool>] [--model <model>] [--user <user>]",
   "Example: doozctl summarize . ./standards .ai/pending.md --tool claude --model opus --user akshay",
 ].join("\n");
+
+/** User-facing usage for plan, shown when the arguments are invalid. */
+const PLAN_USAGE = [
+  "plan creates a Plan under .dooz/plans/active/.",
+  "",
+  "Usage:   doozctl plan [repo] [--method <method>] [--title <title>]",
+  "Example: doozctl plan --method bug-fix",
+].join("\n");
+
+/**
+ * Split plan args into an optional repo positional and the --method/--title
+ * flags. Mirrors the summarize argument parsing: flags are consumed here, not
+ * by the CLI framework.
+ */
+function parsePlanArgs(args: string[]): {
+  repo: string | undefined;
+  method: string | undefined;
+  title: string | undefined;
+} {
+  const positionals: string[] = [];
+  let method: string | undefined;
+  let title: string | undefined;
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i] as string;
+    if (arg === "--method" || arg === "--title") {
+      const value = args[i + 1];
+      if (value === undefined || value.startsWith("-")) {
+        throw new UsageError(`${arg} requires a value`);
+      }
+      if (arg === "--method") {
+        method = value;
+      } else {
+        title = value;
+      }
+      i += 1;
+    } else if (arg.startsWith("--method=")) {
+      method = arg.slice("--method=".length);
+    } else if (arg.startsWith("--title=")) {
+      title = arg.slice("--title=".length);
+    } else if (arg.startsWith("-")) {
+      throw new UsageError(`unknown option: ${arg}`);
+    } else {
+      positionals.push(arg);
+    }
+  }
+  if (positionals.length > 1) {
+    throw new UsageError(PLAN_USAGE);
+  }
+  return { repo: positionals[0], method, title };
+}
+
+/** Derive a kebab-case plan id from a human title. */
+function kebabize(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
 
 /** The session metadata flags summarize accepts. */
 type SessionFlag = "tool" | "model" | "user";

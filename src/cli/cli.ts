@@ -23,11 +23,13 @@ export class ExitCodeError extends Error {
 }
 
 /** Per-command help surfaced in the CLI. */
-interface CommandHelp {
+export interface CommandHelp {
   description: string;
   argumentDescription: string;
   usage: string;
   example: string;
+  /** Optional full help block replacing the generic Usage/Example footer. */
+  helpText?: string;
 }
 
 /** Help text for the built-in commands, keyed by command name. */
@@ -73,6 +75,37 @@ const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
 };
 
 /**
+ * Help for the plan command. The method list is injected from the workflow
+ * assets so the CLI never hard-codes methods; the default method comes from
+ * the frozen contract (WORKFLOW-SPEC.md).
+ */
+export function planCommandHelp(methods: readonly string[], defaultMethod: string): CommandHelp {
+  return {
+    description:
+      "Create a repository-local engineering Plan (intent, context, workflow method, evidence) under .dooz/plans/.",
+    argumentDescription: "the repository path (default .), then --method and --title flags",
+    usage: "doozctl plan [repo] [--method <method>] [--title <title>]",
+    example: "doozctl plan --method bug-fix",
+    helpText: [
+      "",
+      "A Plan is the durable unit of engineering work: what you are trying to",
+      "accomplish, why, what is in and out of scope, and how you will know it is",
+      "done. Plans are created at PLANNED under .dooz/plans/active/ as",
+      "YYYY-MM-DD-<id>.md and are never overwritten.",
+      "",
+      `Methods: ${methods.join(", ")}${methods.includes(defaultMethod) ? ` (default: ${defaultMethod})` : ""}`,
+      "",
+      "Usage: doozctl plan [repo] [--method <method>] [--title <title>]",
+      "",
+      "Examples:",
+      "  doozctl plan",
+      "  doozctl plan --method bug-fix",
+      '  doozctl plan --method feature --title "attendance punch sync"',
+    ].join("\n"),
+  };
+}
+
+/**
  * Rewrite engine errors into user-facing guidance at the CLI boundary. The
  * engine keeps its precise messages; the CLI owns how they read to a human.
  */
@@ -116,6 +149,14 @@ export function humanizeError(error: unknown): string {
     ].join("\n");
   }
 
+  if (message.startsWith("plan already exists:")) {
+    const id = message.slice("plan already exists:".length).trim();
+    return [
+      `Plan already exists: ${id} — left untouched. DoozCTL never overwrites a plan.`,
+      "Pass --title with a distinct name to create a separate plan.",
+    ].join("\n");
+  }
+
   return message;
 }
 
@@ -124,6 +165,7 @@ export function buildProgram(
   dispatcher: Dispatcher,
   stdout: NodeJS.WritableStream = process.stdout,
   stderr: NodeJS.WritableStream = process.stderr,
+  helpOverrides: Readonly<Record<string, CommandHelp>> = {},
 ): Command {
   const program = new Command();
   program
@@ -133,15 +175,21 @@ export function buildProgram(
     .exitOverride()
     .configureOutput({ writeOut: (s) => stdout.write(s), writeErr: (s) => stderr.write(s) });
 
+  const helpMap: Readonly<Record<string, CommandHelp>> = { ...COMMAND_HELP, ...helpOverrides };
   for (const name of dispatcher.commands()) {
     const command = program.command(name);
-    const help = COMMAND_HELP[name];
+    const help = helpMap[name];
     if (help !== undefined) {
       command
         .description(help.description)
         .argument("[args...]", help.argumentDescription)
         .allowUnknownOption(true)
-        .addHelpText("after", `\nUsage: ${help.usage}\n\nExample: ${help.example}\n`);
+        .addHelpText(
+          "after",
+          help.helpText !== undefined
+            ? `\n${help.helpText}\n`
+            : `\nUsage: ${help.usage}\n\nExample: ${help.example}\n`,
+        );
     } else {
       command.argument("[args...]").allowUnknownOption(true);
     }
@@ -163,11 +211,15 @@ export function buildProgram(
 export async function runCli(
   argv: string[],
   dispatcher: Dispatcher,
-  opts: { stdout?: NodeJS.WritableStream; stderr?: NodeJS.WritableStream } = {},
+  opts: {
+    stdout?: NodeJS.WritableStream;
+    stderr?: NodeJS.WritableStream;
+    help?: Readonly<Record<string, CommandHelp>>;
+  } = {},
 ): Promise<number> {
   const stdout = opts.stdout ?? process.stdout;
   const stderr = opts.stderr ?? process.stderr;
-  const program = buildProgram(dispatcher, stdout, stderr);
+  const program = buildProgram(dispatcher, stdout, stderr, opts.help);
 
   try {
     if (argv.length === 0) {

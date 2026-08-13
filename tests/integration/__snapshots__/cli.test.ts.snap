@@ -14,6 +14,8 @@ Commands:
                        memory (.ai/repository-analysis.json).
   doctor [args...]     Validate the repository and report problems. Read-only.
   init [args...]       Initialize a repository with AI repository standards.
+  plan [args...]       Create a repository-local engineering Plan (intent,
+                       context, workflow method, evidence) under .dooz/plans/.
   status [args...]     Display repository status. Read-only.
   summarize [args...]  Append an immutable session summary and update the
                        current context.

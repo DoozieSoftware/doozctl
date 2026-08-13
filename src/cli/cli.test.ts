@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { Writable } from "node:stream";
 import { Dispatcher, ExitCode } from "../dispatcher/dispatcher.js";
 import { UsageError } from "../errors.js";
-import { buildProgram, humanizeError, runCli, VERSION } from "./cli.js";
+import { DEFAULT_METHOD, listWorkflowMethodIds } from "../workflows/methods.js";
+import { buildProgram, humanizeError, planCommandHelp, runCli, VERSION } from "./cli.js";
 
 function capture(): { stdout: Writable; stderr: Writable; out: () => string; err: () => string } {
   let outBuf = "";
@@ -45,6 +46,30 @@ describe("buildProgram", () => {
   });
 });
 
+describe("planCommandHelp", () => {
+  it("explains what a plan is, where it is stored, the methods, and examples", () => {
+    const help = planCommandHelp(listWorkflowMethodIds(), DEFAULT_METHOD);
+    expect(help.description).toContain("Plan");
+    expect(help.helpText).toContain(".dooz/plans/active/");
+    expect(help.helpText).toContain("Methods: bug-fix, feature, investigation, standard, triage");
+    expect(help.helpText).toContain("(default: standard)");
+    expect(help.helpText).toContain("doozctl plan");
+    expect(help.helpText).toContain("doozctl plan --method bug-fix");
+  });
+
+  it("renders plan help through the CLI with the available methods", async () => {
+    const streams = capture();
+    const d = new Dispatcher().register("plan", async () => ExitCode.OK);
+    const code = await runCli(["plan", "--help"], d, {
+      ...streams,
+      help: { plan: planCommandHelp(listWorkflowMethodIds(), DEFAULT_METHOD) },
+    });
+    expect(code).toBe(ExitCode.OK);
+    expect(streams.out()).toContain("Create a repository-local engineering Plan");
+    expect(streams.out()).toContain("Methods: bug-fix, feature, investigation, standard, triage");
+  });
+});
+
 describe("humanizeError", () => {
   it("rewrites a missing-standards-package error with guidance", () => {
     const message = humanizeError(new Error("standards package not found: /tmp/nope/package.json"));
@@ -70,6 +95,13 @@ describe("humanizeError", () => {
 
   it("passes through unknown errors unchanged", () => {
     expect(humanizeError(new Error("kaboom"))).toBe("kaboom");
+  });
+
+  it("reports a duplicate plan and gives a next action without overwriting", () => {
+    const message = humanizeError(new Error("plan already exists: standard"));
+    expect(message).toContain("Plan already exists: standard");
+    expect(message).toContain("left untouched");
+    expect(message).toContain("--title");
   });
 });
 
