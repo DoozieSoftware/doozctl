@@ -1,7 +1,7 @@
 # DoozCTL Specification
 
-**Version:** 2.0 Draft
-**Status:** Canonical
+**Version:** 1.0.0
+**Status:** Canonical (frozen with DoozCTL v1.0.0)
 
 ---
 
@@ -248,7 +248,11 @@ Validate
 Write
 ```
 
-Every command follows this pipeline.
+Every command runs the pipeline steps its workflow requires. Read-only commands
+(`status`, `doctor`) never reach write; `summarize` adds session steps;
+`analyze` persists the analysis without touching artifacts; `init` is the only
+command that runs the full pipeline. `sync` re-renders from persisted repository
+state and never re-analyzes, so repeated runs are byte-identical.
 
 ---
 
@@ -290,7 +294,6 @@ repository:
   root:
   git:
   statistics:
-  aiFiles:
 
 build:
   buildSystem:
@@ -354,11 +357,19 @@ Merged Output
 * Never write unless the merge succeeds.
 * Never partially update.
 * No merge conflicts, no three-way merge, no Git logic. If a merge is impossible, return an error and leave the file untouched. The user decides.
+* First-write ownership: `overwrite` may replace a file the engine created, never a user-owned file. A file is engine-owned when its artifact id and destination are both recorded in the manifest, or its first line carries the generated marker. Anything else fails safely with the file untouched.
 * Determinism: identical input produces identical output, always.
 
 ## overwrite
 
 Replace the existing content completely.
+
+Guarded by first-write ownership: a pre-existing file that the engine did not
+create is never replaced — the merge fails safely. The guard passes when the
+artifact id **and destination** are both recorded in the engine manifest (the
+engine generated that exact file before) or the file carries the
+`DOOZCTL:GENERATED:v1` marker. Ownership is bound to the destination: reusing
+a recorded id at a different destination does not grant ownership.
 
 Used for generated machine state.
 
@@ -481,14 +492,23 @@ Skip artifacts outside the sync lifecycle and report them.
 
 ## doctor
 
-Validate repository.
+Validate repository health. Read-only.
 
-Check:
+Checks:
 
-* artifacts
-* manifest
-* managed blocks
-* schemas
+* initialization (`.dooz/manifest.json`)
+* repository memory (`.ai/repository-analysis.json`)
+* Standards Package validity
+* manifest coverage of declared init/sync artifacts
+* generated artifact files exist on disk
+* managed-block marker integrity (never repaired, only reported)
+* live git state (uncommitted changes, re-checked on every run)
+
+Exit codes:
+
+* `0` — repository healthy
+* `1` — problems found
+* `2` — invalid arguments
 
 ---
 
@@ -497,6 +517,11 @@ Check:
 Create new session summary.
 
 Update current context.
+
+Session content is budgeted: raw content beyond 12 KB is truncated with a
+notice, so session files cannot grow without bound. Current-context fields are
+capped individually. Agents are instructed (by the Standards Package) to
+summarize durable engineering context only.
 
 ---
 
@@ -525,6 +550,12 @@ sessions/
 ```
 
 `.dooz/` holds engine state. `.ai/` holds AI-readable memory. These files belong to the engine. They are regenerated as required.
+
+The manifest records each generated artifact bound to its destination
+(`{ "id": ..., "destination": ... }`). This binding is what first-write
+ownership checks: an artifact is engine-owned only at the exact destination
+the engine previously wrote it to. Manifests written before the destination
+binding record plain ids; they are tolerated on read but grant no ownership.
 
 ---
 
@@ -558,10 +589,12 @@ The engine must be:
 It must never:
 
 * overwrite unmanaged content
+* overwrite a file it did not create, even under the `overwrite` strategy
 * fabricate repository information
 * modify application code during analysis
 * depend on internet connectivity
 * embed company-specific guidance
+* know AI tool names, artifact names, or vendor conventions
 
 ---
 

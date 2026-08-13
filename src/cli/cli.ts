@@ -1,5 +1,6 @@
 import { Command, CommanderError } from "commander";
 import { Dispatcher, ExitCode } from "../dispatcher/dispatcher.js";
+import { UsageError } from "../errors.js";
 
 /**
  * CLI: the thin command-line interface.
@@ -100,6 +101,13 @@ export function humanizeError(error: unknown): string {
     ].join("\n");
   }
 
+  if (message.includes("destination already exists and is not engine-generated")) {
+    return [
+      "A destination file already exists and is not engine-owned, so it was left untouched.",
+      "overwrite only rewrites files DoozCTL created. Remove or convert the file, then run the command again.",
+    ].join("\n");
+  }
+
   if (message.startsWith("session file not found:")) {
     const at = message.slice("session file not found:".length).trim();
     return [
@@ -170,6 +178,10 @@ export async function runCli(
     return ExitCode.OK;
   } catch (err) {
     if (err instanceof ExitCodeError) {
+      return err.exitCode;
+    }
+    if (err instanceof UsageError) {
+      stderr.write(`doozctl: ${humanizeError(err)}\n`);
       return err.exitCode;
     }
     if (err instanceof CommanderError) {

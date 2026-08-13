@@ -1,5 +1,4 @@
-import type { Engine } from "../engine/engine.js";
-import type { PipelineStep } from "../engine/engine.js";
+import type { Engine, ExecutionContext, PipelineStep } from "../engine/engine.js";
 import type {
   AnalyzeDeps,
   LoadDeps,
@@ -20,6 +19,8 @@ import {
 import { formatSessionId, toLocalIso } from "../engine/session.js";
 import type { SessionInput } from "../model/model.js";
 import { Storage } from "../store/storage.js";
+import { UsageError } from "../errors.js";
+import { ExitCode } from "../dispatcher/dispatcher.js";
 import { readFile } from "node:fs/promises";
 
 /**
@@ -59,21 +60,21 @@ export class App {
   /** init: run the full pipeline, create the manifest, and report success. */
   async init(args: string[]): Promise<number> {
     if (args.length < 2) {
-      throw new Error(INIT_USAGE);
+      throw new UsageError(INIT_USAGE);
     }
     const root = args[0] as string;
     const standardsDir = args[1] as string;
     await this.run(initPipeline(this.deps), args);
     this.deps.print(this.formatInitReport(root, await this.declaredDestinations(standardsDir)));
-    return 0;
+    return ExitCode.OK;
   }
 
-  /**
-   * analyze: re-analyze the repository and update the repository memory
+  /** analyze: re-analyze the repository and update the repository memory
    * (`.ai/repository-analysis.json`). Requires an initialized repository.
    */
   async analyze(args: string[]): Promise<number> {
-    return this.run(analyzePipeline(this.deps), args);
+    await this.run(analyzePipeline(this.deps), args);
+    return ExitCode.OK;
   }
 
   /**
@@ -85,7 +86,7 @@ export class App {
    */
   async sync(args: string[]): Promise<number> {
     if (args.length < 2) {
-      throw new Error(SYNC_USAGE);
+      throw new UsageError(SYNC_USAGE);
     }
     const root = args[0] as string;
     const standardsDir = args[1] as string;
@@ -113,7 +114,7 @@ export class App {
       this.deps.print("✓ Repository already up to date.");
       this.deps.print("");
       this.deps.print("No changes required.");
-      return 0;
+      return ExitCode.OK;
     }
 
     this.deps.print("✓ Loaded repository state");
@@ -125,15 +126,19 @@ export class App {
     this.deps.print("Done.");
     this.deps.print("");
     this.deps.print("Repository synchronized successfully.");
-    return 0;
+    return ExitCode.OK;
   }
 
-  /** doctor: validate the repository and report. Read-only. */
+  /**
+   * doctor: validate the repository and report. Read-only. Returns exit code 1
+   * when problems are found so scripts can gate on repository health.
+   */
   async doctor(args: string[]): Promise<number> {
     if (args.length < 2) {
-      throw new Error(DOCTOR_USAGE);
+      throw new UsageError(DOCTOR_USAGE);
     }
-    return this.run(doctorPipeline(this.deps), args);
+    const ctx = await this.run(doctorPipeline(this.deps), args);
+    return ctx.doctorProblems.length > 0 ? ExitCode.Error : ExitCode.OK;
   }
 
   /**
@@ -144,7 +149,7 @@ export class App {
   async summarize(args: string[]): Promise<number> {
     const parsed = parseSummarizeArgs(args);
     if (parsed.positionals.length < 3) {
-      throw new Error(SUMMARIZE_USAGE);
+      throw new UsageError(SUMMARIZE_USAGE);
     }
     const root = parsed.positionals[0] as string;
     const standardsDir = parsed.positionals[1] as string;
@@ -190,17 +195,17 @@ export class App {
     }
     this.deps.print("");
     this.deps.print("Done.");
-    return 0;
+    return ExitCode.OK;
   }
 
   /** status: report repository status. Read-only. */
   async status(args: string[]): Promise<number> {
-    return this.run(statusPipeline(this.deps), args);
+    await this.run(statusPipeline(this.deps), args);
+    return ExitCode.OK;
   }
 
-  private async run(steps: PipelineStep[], args: string[]): Promise<number> {
-    await this.engine.run({ root: args[0] ?? ".", standardsDir: args[1] ?? "" }, steps);
-    return 0;
+  private async run(steps: PipelineStep[], args: string[]): Promise<ExecutionContext> {
+    return this.engine.run({ root: args[0] ?? ".", standardsDir: args[1] ?? "" }, steps);
   }
 
   /** The declared init-lifecycle destinations, sorted, for the init report. */

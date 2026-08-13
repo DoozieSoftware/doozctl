@@ -78,7 +78,6 @@ function minimalAnalysis(root: string): Analysis {
     ci: [],
     docker: false,
     statistics: { totalFiles: 0, sourceFiles: 0, testFiles: 0 },
-    aiFiles: [],
   };
 }
 
@@ -349,7 +348,7 @@ describe("pipeline steps", () => {
     ).resolves.toContain('"root"');
   });
 
-  it("write step preserves artifact ids recorded by other workflows in the manifest", async () => {
+  it("write step preserves artifact records written by other workflows in the manifest", async () => {
     const repo = await tmp();
     await mkdir(path.join(repo, ".dooz"), { recursive: true });
     await writeFile(
@@ -376,8 +375,11 @@ describe("pipeline steps", () => {
     );
     const manifest = JSON.parse(
       await readFile(path.join(repo, ".dooz", "manifest.json"), "utf-8"),
-    ) as { artifacts: string[] };
-    expect(manifest.artifacts).toEqual(["gitignore", "agents"]);
+    ) as { artifacts: Array<{ id: string; destination: string } | string> };
+    expect(manifest.artifacts).toEqual([
+      "gitignore",
+      { id: "agents", destination: "docs/AGENTS.md" },
+    ]);
   });
 
   it("session step parses content, carries forward context and records git facts", async () => {
@@ -551,28 +553,43 @@ describe("pipeline steps", () => {
 
   it("doctor report step reports a healthy repository", async () => {
     const printed: string[] = [];
-    await runSteps([
-      async (c) => {
-        c.manifest = { version: 1, artifacts: ["agents"] };
-        c.standards = {
-          format: 2,
-          name: "@dooziesoft/standards",
-          version: "1.0.0",
-          engine: ">=1.0.0",
-          artifacts: [],
-        };
-        c.artifacts = [
-          createArtifact({
-            id: "agents",
-            source: { path: "a.md" },
-            destination: { path: "AGENTS.md" },
-            mergeStrategy: "managed-blocks",
-            lifecycle: ["init", "sync"],
-          }),
-        ];
-      },
-      reportStep({ print: (m) => printed.push(m), store: new RepositoryStore() }, "doctor"),
-    ]);
+    const repo = await tmp();
+    await mkdir(path.join(repo, ".dooz"), { recursive: true });
+    await writeFile(
+      path.join(repo, "AGENTS.md"),
+      [
+        "# AGENTS",
+        "<!-- DOOZCTL:BEGIN:v1 repository-analysis -->",
+        "x",
+        "<!-- DOOZCTL:END:v1 repository-analysis -->",
+      ].join("\n"),
+      "utf-8",
+    );
+    await runSteps(
+      [
+        async (c) => {
+          c.manifest = { version: 1, artifacts: ["agents"] };
+          c.standards = {
+            format: 2,
+            name: "@dooziesoft/standards",
+            version: "1.0.0",
+            engine: ">=1.0.0",
+            artifacts: [],
+          };
+          c.artifacts = [
+            createArtifact({
+              id: "agents",
+              source: { path: "a.md" },
+              destination: { path: "AGENTS.md" },
+              mergeStrategy: "managed-blocks",
+              lifecycle: ["init", "sync"],
+            }),
+          ];
+        },
+        reportStep({ print: (m) => printed.push(m), store: new RepositoryStore() }, "doctor"),
+      ],
+      { root: repo },
+    );
     expect(printed[0]).toContain("Repository is healthy.");
     expect(printed[0]).toContain("✓ Initialized — .dooz/manifest.json");
     expect(printed[0]).toContain("✓ Generated artifacts recorded — 1 in manifest");
@@ -580,23 +597,288 @@ describe("pipeline steps", () => {
 
   it("doctor report step flags artifacts missing from the manifest", async () => {
     const printed: string[] = [];
-    await runSteps([
-      async (c) => {
-        c.manifest = { version: 1, artifacts: [] };
-        c.artifacts = [
-          createArtifact({
-            id: "agents",
-            source: { path: "a.md" },
-            destination: { path: "AGENTS.md" },
-            mergeStrategy: "managed-blocks",
-            lifecycle: ["init", "sync"],
-          }),
-        ];
-      },
-      reportStep({ print: (m) => printed.push(m), store: new RepositoryStore() }, "doctor"),
-    ]);
+    const repo = await tmp();
+    await runSteps(
+      [
+        async (c) => {
+          c.manifest = { version: 1, artifacts: [] };
+          c.artifacts = [
+            createArtifact({
+              id: "agents",
+              source: { path: "a.md" },
+              destination: { path: "AGENTS.md" },
+              mergeStrategy: "managed-blocks",
+              lifecycle: ["init", "sync"],
+            }),
+          ];
+        },
+        reportStep({ print: (m) => printed.push(m), store: new RepositoryStore() }, "doctor"),
+      ],
+      { root: repo },
+    );
     expect(printed[0]).toContain("Problems found:");
     expect(printed[0]).toContain("Artifacts not recorded in the manifest: agents");
     expect(printed[0]).not.toContain("Repository is healthy.");
+  });
+
+  it("doctor report step flags a missing generated artifact file", async () => {
+    const printed: string[] = [];
+    const repo = await tmp();
+    await runSteps(
+      [
+        async (c) => {
+          c.manifest = { version: 1, artifacts: ["agents"] };
+          c.artifacts = [
+            createArtifact({
+              id: "agents",
+              source: { path: "a.md" },
+              destination: { path: "AGENTS.md" },
+              mergeStrategy: "managed-blocks",
+              lifecycle: ["init", "sync"],
+            }),
+          ];
+        },
+        reportStep({ print: (m) => printed.push(m), store: new RepositoryStore() }, "doctor"),
+      ],
+      { root: repo },
+    );
+    expect(printed[0]).toContain("Problems found:");
+    expect(printed[0]).toContain("Generated artifact missing: AGENTS.md");
+  });
+
+  it("doctor report step flags malformed managed-block markers", async () => {
+    const printed: string[] = [];
+    const repo = await tmp();
+    await writeFile(
+      path.join(repo, "AGENTS.md"),
+      ["# AGENTS", "<!-- DOOZCTL:BEGIN:v1 repository-analysis -->", "orphaned"].join("\n"),
+      "utf-8",
+    );
+    await runSteps(
+      [
+        async (c) => {
+          c.manifest = { version: 1, artifacts: ["agents"] };
+          c.artifacts = [
+            createArtifact({
+              id: "agents",
+              source: { path: "a.md" },
+              destination: { path: "AGENTS.md" },
+              mergeStrategy: "managed-blocks",
+              lifecycle: ["init", "sync"],
+            }),
+          ];
+        },
+        reportStep({ print: (m) => printed.push(m), store: new RepositoryStore() }, "doctor"),
+      ],
+      { root: repo },
+    );
+    expect(printed[0]).toContain("Problems found:");
+    expect(printed[0]).toContain("Managed-block markers malformed in AGENTS.md");
+    expect(printed[0]).toContain("BEGIN without END");
+  });
+
+  it("doctor report step flags problems for exit-code handling", async () => {
+    const printed: string[] = [];
+    const repo = await tmp();
+    let problems: string[] = [];
+    await runSteps(
+      [
+        async (c) => {
+          c.manifest = { version: 1, artifacts: [] };
+          c.artifacts = [
+            createArtifact({
+              id: "agents",
+              source: { path: "a.md" },
+              destination: { path: "AGENTS.md" },
+              mergeStrategy: "managed-blocks",
+              lifecycle: ["init", "sync"],
+            }),
+          ];
+        },
+        reportStep({ print: (m) => printed.push(m), store: new RepositoryStore() }, "doctor"),
+        async (c) => {
+          problems = c.doctorProblems;
+        },
+      ],
+      { root: repo },
+    );
+    expect(problems.length).toBeGreaterThan(0);
+  });
+
+  it("overwrite merge refuses a destination the engine does not own", async () => {
+    const repo = await tmp();
+    await writeFile(path.join(repo, "state.txt"), "user content", "utf-8");
+    const artifact = createArtifact({
+      id: "state",
+      source: { path: "a.md" },
+      destination: { path: "state.txt" },
+      mergeStrategy: "overwrite",
+      lifecycle: ["init"],
+    });
+    await expect(
+      runSteps(
+        [
+          async (c) => {
+            c.rendered = [{ artifact, content: "generated" }];
+          },
+          mergeStep({ mergers: builtinMergers() }),
+        ],
+        { root: repo },
+      ),
+    ).rejects.toThrow(/not engine-generated/);
+    await expect(readFile(path.join(repo, "state.txt"), "utf-8")).resolves.toBe("user content");
+  });
+
+  it("overwrite merge allows a destination recorded in the manifest", async () => {
+    const repo = await tmp();
+    await mkdir(path.join(repo, ".dooz"), { recursive: true });
+    await writeFile(
+      path.join(repo, ".dooz", "manifest.json"),
+      JSON.stringify({
+        version: 1,
+        artifacts: [{ id: "state", destination: "state.txt" }],
+      }),
+      "utf-8",
+    );
+    await writeFile(path.join(repo, "state.txt"), "stale generated", "utf-8");
+    const artifact = createArtifact({
+      id: "state",
+      source: { path: "a.md" },
+      destination: { path: "state.txt" },
+      mergeStrategy: "overwrite",
+      lifecycle: ["sync"],
+    });
+    const ctx = await runSteps(
+      [
+        async (c) => {
+          c.rendered = [{ artifact, content: "fresh generated" }];
+        },
+        mergeStep({ mergers: builtinMergers() }),
+      ],
+      { root: repo },
+    );
+    expect(ctx.merged[0]?.content).toBe("fresh generated");
+  });
+
+  it("overwrite merge refuses a recorded id reused at a different destination", async () => {
+    const repo = await tmp();
+    await mkdir(path.join(repo, ".dooz"), { recursive: true });
+    await writeFile(
+      path.join(repo, ".dooz", "manifest.json"),
+      JSON.stringify({
+        version: 1,
+        artifacts: [{ id: "state", destination: "state.txt" }],
+      }),
+      "utf-8",
+    );
+    await writeFile(path.join(repo, "README.md"), "precious user content", "utf-8");
+    const artifact = createArtifact({
+      id: "state",
+      source: { path: "a.md" },
+      destination: { path: "README.md" },
+      mergeStrategy: "overwrite",
+      lifecycle: ["sync"],
+    });
+    await expect(
+      runSteps(
+        [
+          async (c) => {
+            c.rendered = [{ artifact, content: "pwned" }];
+          },
+          mergeStep({ mergers: builtinMergers() }),
+        ],
+        { root: repo },
+      ),
+    ).rejects.toThrow(/not engine-generated/);
+    await expect(readFile(path.join(repo, "README.md"), "utf-8")).resolves.toBe(
+      "precious user content",
+    );
+  });
+
+  it("overwrite merge treats legacy id-only manifest records as not owned", async () => {
+    const repo = await tmp();
+    await mkdir(path.join(repo, ".dooz"), { recursive: true });
+    await writeFile(
+      path.join(repo, ".dooz", "manifest.json"),
+      JSON.stringify({ version: 1, artifacts: ["state"] }),
+      "utf-8",
+    );
+    await writeFile(path.join(repo, "state.txt"), "user content", "utf-8");
+    const artifact = createArtifact({
+      id: "state",
+      source: { path: "a.md" },
+      destination: { path: "state.txt" },
+      mergeStrategy: "overwrite",
+      lifecycle: ["sync"],
+    });
+    await expect(
+      runSteps(
+        [
+          async (c) => {
+            c.rendered = [{ artifact, content: "pwned" }];
+          },
+          mergeStep({ mergers: builtinMergers() }),
+        ],
+        { root: repo },
+      ),
+    ).rejects.toThrow(/not engine-generated/);
+    await expect(readFile(path.join(repo, "state.txt"), "utf-8")).resolves.toBe("user content");
+  });
+
+  it("overwrite merge allows a file carrying the generated marker", async () => {
+    const repo = await tmp();
+    await writeFile(path.join(repo, "wrapper.md"), "<!-- DOOZCTL:GENERATED:v1 -->\nold", "utf-8");
+    const artifact = createArtifact({
+      id: "wrapper",
+      source: { path: "a.md" },
+      destination: { path: "wrapper.md" },
+      mergeStrategy: "overwrite",
+      lifecycle: ["sync"],
+    });
+    const ctx = await runSteps(
+      [
+        async (c) => {
+          c.rendered = [{ artifact, content: "<!-- DOOZCTL:GENERATED:v1 -->\nnew" }];
+        },
+        mergeStep({ mergers: builtinMergers() }),
+      ],
+      { root: repo },
+    );
+    expect(ctx.merged[0]?.content).toBe("<!-- DOOZCTL:GENERATED:v1 -->\nnew");
+  });
+
+  it("session step caps over-budget session content", async () => {
+    const repo = await tmp();
+    let seen: unknown = null;
+    await runSteps(
+      [
+        async (c) => {
+          c.artifacts = [];
+          c.analysis = minimalAnalysis(repo);
+        },
+        sessionStep(
+          {
+            git: {
+              commitHash: async () => null,
+            } as never,
+          },
+          {
+            id: "2026-08-09_093000",
+            date: "2026-08-09T09:30:00+08:00",
+            content: "## Summary\n" + "x".repeat(13 * 1024),
+            tool: "",
+            model: "",
+            user: "",
+          },
+        ),
+        async (c) => {
+          seen = c.variables.session;
+        },
+      ],
+      { root: repo },
+    );
+    const session = seen as { content: string };
+    expect(session.content.length).toBeLessThan(13 * 1024);
+    expect(session.content).toContain("[truncated");
   });
 });

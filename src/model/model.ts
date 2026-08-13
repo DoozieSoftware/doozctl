@@ -61,8 +61,6 @@ export interface Analysis {
   /** Whether a Docker configuration is present. */
   docker: boolean;
   statistics: RepositoryStatistics;
-  /** AI-related files present in the repository, detected only. */
-  aiFiles: string[];
 }
 
 /**
@@ -82,19 +80,24 @@ export interface StandardsPackage {
   artifacts: Artifact[];
 }
 
+/** One generated artifact record in the engine manifest. */
+export interface ManifestEntry {
+  /** Stable artifact id, matching the Standards Package declaration. */
+  id: string;
+  /** Repository-relative destination the artifact was written to. */
+  destination: string;
+}
+
 /** Records which artifacts the engine has generated. */
 export interface Manifest {
   /** Format version. */
   version: number;
-  /** Ids of generated artifacts. */
-  artifacts: string[];
-}
-
-/** An immutable session summary. */
-export interface Session {
-  id: string;
-  createdAt: Date;
-  summary: string;
+  /**
+   * Records of generated artifacts (id + destination). Legacy records from
+   * manifests written before the destination binding are plain ids; they are
+   * tolerated on read but grant no overwrite ownership.
+   */
+  artifacts: Array<ManifestEntry | string>;
 }
 
 /**
@@ -114,10 +117,4 @@ export interface SessionInput {
   model: string;
   /** User who ran the session, or "". */
   user: string;
-}
-
-/** A loaded extension. */
-export interface Plugin {
-  name: string;
-  version: string;
 }

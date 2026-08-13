@@ -15,7 +15,6 @@ function analysis(overrides: Partial<Analysis> = {}): Analysis {
     ci: ["github-actions"],
     docker: true,
     statistics: { totalFiles: 10, sourceFiles: 5, testFiles: 1 },
-    aiFiles: ["AGENTS.md"],
     ...overrides,
   };
 }
@@ -32,7 +31,6 @@ describe("resolveVariables", () => {
         root: "/tmp/repo",
         git: { isRepository: true, branch: "main", dirty: false },
         statistics: { totalFiles: 10, sourceFiles: 5, testFiles: 1 },
-        aiFiles: ["AGENTS.md"],
       },
       build: {
         buildSystem: "vite",
@@ -53,7 +51,6 @@ describe("resolveVariables", () => {
         testFramework: null,
         ci: [],
         docker: false,
-        aiFiles: [],
       }),
     );
     expect(vars).toEqual({
@@ -66,7 +63,6 @@ describe("resolveVariables", () => {
         root: "/tmp/repo",
         git: { isRepository: true, branch: "main", dirty: false },
         statistics: { totalFiles: 10, sourceFiles: 5, testFiles: 1 },
-        aiFiles: [],
       },
       build: {
         buildSystem: null,

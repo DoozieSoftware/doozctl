@@ -16,6 +16,13 @@ import { resolvePath } from "./artifact-renderer.js";
 /** Maximum length of a single current-context field (~1 page across five). */
 export const MAX_CONTEXT_FIELD_CHARS = 400;
 
+/**
+ * Hard budget for a session summary's raw content (~12 KB). Sessions keep a
+ * durable engineering record, not a transcript: content beyond the budget is
+ * truncated with a notice so the session file cannot grow without bound.
+ */
+export const SESSION_CONTENT_BUDGET = 12 * 1024;
+
 /** The six sections a session summary may contain, in contract order. */
 export const SESSION_SECTIONS = [
   "Objective",
@@ -86,6 +93,22 @@ export function capField(value: string): string {
     return value;
   }
   return `${value.slice(0, MAX_CONTEXT_FIELD_CHARS).trimEnd()}…`;
+}
+
+/**
+ * Cap raw session content to the session budget, appending a truncation
+ * notice. Content within the budget is returned unchanged.
+ */
+export function capSessionContent(content: string): string {
+  if (content.length <= SESSION_CONTENT_BUDGET) {
+    return content;
+  }
+  const head = content.slice(0, SESSION_CONTENT_BUDGET).trimEnd();
+  return [
+    head,
+    "",
+    `…[truncated: session content exceeded the ${SESSION_CONTENT_BUDGET}-character budget; summarize durable context only]`,
+  ].join("\n");
 }
 
 /** Session file id from a date: `YYYY-MM-DD_HHMMSS`. */

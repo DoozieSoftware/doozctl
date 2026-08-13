@@ -19,7 +19,6 @@ export function resolveVariables(analysis: Analysis): Variables {
       root: analysis.root,
       git: analysis.git,
       statistics: analysis.statistics,
-      aiFiles: analysis.aiFiles,
     },
     build: {
       buildSystem: analysis.buildSystem,

@@ -1,14 +1,7 @@
 import { merge } from "./merge.js";
 import { RepositoryAnalyzer, type GitDetector } from "./repository-analyzer.js";
 import { StandardsPackageLoader } from "./standards-loader.js";
-import type {
-  Analysis,
-  Artifact,
-  MergeStrategy,
-  RenderedArtifact,
-  StandardsPackage,
-  Variables,
-} from "../model/model.js";
+import type { Analysis, Artifact, MergeStrategy, StandardsPackage } from "../model/model.js";
 
 /**
  * Extension point contracts.
@@ -18,7 +11,7 @@ import type {
  * runtime plugin discovery is deferred until it is needed; the default
  * implementations below delegate to the built-in engine implementations.
  *
- * The default renderer is not exposed here: templates live inside the Standards
+ * Rendering is not exposed as a seam: templates live inside the Standards
  * Package, whose root is known only per run, so the render step constructs the
  * built-in ArtifactRenderer against the run's package directory.
  */
@@ -31,11 +24,6 @@ export interface Analyzer {
 /** Standards Loader: loads a Standards Package manifest. */
 export interface StandardsLoader {
   load(dir: string): Promise<StandardsPackage>;
-}
-
-/** Artifact Renderer: turns a template into content using resolved variables. */
-export interface Renderer {
-  render(artifact: Artifact, variables: Variables): Promise<RenderedArtifact>;
 }
 
 /** Merge strategy: combines rendered content with existing on-disk content. */

@@ -84,6 +84,7 @@ function spyEngine() {
   const engine = {
     run: async (opts: { root: string; standardsDir: string }, steps: Array<{ name?: string }>) => {
       calls.push({ root: opts.root, steps: steps.map((s) => s.name ?? "?") });
+      return { doctorProblems: [] };
     },
   } as unknown as Engine;
   return { engine, calls };
@@ -142,7 +143,7 @@ describe("App", () => {
     const executed = calls.map((c) => c.steps);
     expect(executed).toEqual([
       ["loadStateStep", "analyzeStep", "saveAnalysisStep"],
-      ["loadStateStep", "loadStep", "reportStep"],
+      ["loadStateStep", "loadStep", "analyzeStep", "reportStep"],
       [
         "loadStateStep",
         "loadStep",
@@ -292,6 +293,30 @@ describe("App", () => {
     const { deps } = buildDeps();
     const app = new App(new Engine(), deps);
     await expect(app.doctor([dir, pkg])).rejects.toThrow(/not initialized/);
+  });
+
+  it("doctor returns exit code 1 when problems are found", async () => {
+    const dir = await tmp();
+    const pkg = await tmp();
+    await writePackage(pkg);
+    const { deps } = buildDeps();
+    const app = new App(new Engine(), deps);
+    await app.init([dir, pkg]);
+
+    const { rm } = await import("node:fs/promises");
+    await rm(path.join(dir, "AGENTS.md"));
+
+    const { deps: doctorDeps, printed: doctorPrinted } = buildDeps();
+    const doctor = new App(new Engine(), doctorDeps);
+    await expect(doctor.doctor([dir, pkg])).resolves.toBe(1);
+    expect(doctorPrinted.join("\n")).toContain("Problems found:");
+  });
+
+  it("usage errors carry exit code 2", async () => {
+    const { engine, calls } = spyEngine();
+    const app = new App(engine, buildDeps().deps);
+    await expect(app.init([])).rejects.toMatchObject({ exitCode: 2 });
+    expect(calls).toHaveLength(0);
   });
 
   it("status prints a report about the repository", async () => {

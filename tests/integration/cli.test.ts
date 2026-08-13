@@ -138,8 +138,8 @@ describe("doozctl CLI (integration)", () => {
     expect(await runCli(["doctor", repo, pkg], dispatcher)).toBe(0);
     expect(await runCli(["status", repo], dispatcher)).toBe(0);
 
-    // summarize without a session file exits 1 with usage guidance.
-    expect(await runCli(["summarize", repo, pkg], dispatcher)).toBe(1);
+    // summarize without a session file exits 2 with usage guidance.
+    expect(await runCli(["summarize", repo, pkg], dispatcher)).toBe(2);
   });
 
   it("doctor prints a health report to stdout", async () => {
@@ -159,6 +159,33 @@ describe("doozctl CLI (integration)", () => {
     expect(code).toBe(0);
     expect(streams.out()).toContain("Repository is healthy.");
     expect(streams.out()).toContain("✓ Standards package — @dooziesoft/standards 1.0.0");
+  });
+
+  it("doctor exits 1 when the repository has problems", async () => {
+    const { repo, pkg } = await makeRepoAndPackage();
+    const streams = capture();
+    const app = new App(new Engine(), {
+      ...buildDeps(),
+      print: (message) => streams.stdout.write(message + "\n"),
+    });
+    const dispatcher = new Dispatcher()
+      .register("init", app.init.bind(app))
+      .register("doctor", app.doctor.bind(app));
+
+    await runCli(["init", repo, pkg], dispatcher, streams);
+    await rm(path.join(repo, "AGENTS.md"));
+
+    const code = await runCli(["doctor", repo, pkg], dispatcher, streams);
+    expect(code).toBe(1);
+    expect(streams.out()).toContain("Problems found:");
+    expect(streams.out()).toContain("Generated artifact missing: AGENTS.md");
+  });
+
+  it("doctor exits 2 when arguments are missing", async () => {
+    const streams = capture();
+    const code = await runCli(["doctor"], buildDispatcher(), streams);
+    expect(code).toBe(2);
+    expect(streams.err()).toContain("Usage:   doozctl doctor <repo> <package>");
   });
 
   it("status prints an analysis report to stdout", async () => {
@@ -243,7 +270,7 @@ describe("doozctl CLI (integration)", () => {
   it("rejects init with missing arguments and prints usage guidance", async () => {
     const streams = capture();
     const code = await runCli(["init"], buildDispatcher(), streams);
-    expect(code).toBe(1);
+    expect(code).toBe(2);
     expect(streams.err()).toContain("Usage:   doozctl init <repo> <package>");
   });
 

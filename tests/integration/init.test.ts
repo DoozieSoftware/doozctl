@@ -63,6 +63,33 @@ const MANAGED_TEMPLATE = [
 
 /** Create a Standards Package declaring one managed-blocks artifact. */
 async function writePackage(pkg: string, template: string = MANAGED_TEMPLATE): Promise<void> {
+  await writeCustomPackage(
+    pkg,
+    [
+      {
+        id: "agents",
+        source: "artifacts/AGENTS.md",
+        destination: "AGENTS.md",
+        merge: "managed-blocks",
+        lifecycle: ["init", "sync"],
+      },
+    ],
+    { "AGENTS.md": template },
+  );
+}
+
+/** Create a Standards Package declaring the given artifacts and templates. */
+async function writeCustomPackage(
+  pkg: string,
+  artifacts: Array<{
+    id: string;
+    source: string;
+    destination: string;
+    merge: "managed-blocks" | "overwrite" | "append" | "replace-generated";
+    lifecycle: Array<"init" | "sync" | "summarize">;
+  }>,
+  templates: Record<string, string>,
+): Promise<void> {
   await writeFile(
     path.join(pkg, "package.json"),
     JSON.stringify({
@@ -70,19 +97,13 @@ async function writePackage(pkg: string, template: string = MANAGED_TEMPLATE): P
       name: "@dooziesoft/standards",
       version: "1.0.0",
       engine: ">=1.0.0",
-      artifacts: [
-        {
-          id: "agents",
-          source: "artifacts/AGENTS.md",
-          destination: "AGENTS.md",
-          merge: "managed-blocks",
-          lifecycle: ["init", "sync"],
-        },
-      ],
+      artifacts,
     }),
   );
   await mkdir(path.join(pkg, "artifacts"), { recursive: true });
-  await writeFile(path.join(pkg, "artifacts", "AGENTS.md"), template, "utf-8");
+  for (const [name, content] of Object.entries(templates)) {
+    await writeFile(path.join(pkg, "artifacts", name), content, "utf-8");
+  }
 }
 
 /** A repository that the analyzer sees as TypeScript (stable, non-git). */
@@ -118,8 +139,11 @@ describe("doozctl init (integration)", () => {
     );
     const manifest = JSON.parse(
       await readFile(path.join(repo, ".dooz", "manifest.json"), "utf-8"),
-    ) as { version: number; artifacts: string[] };
-    expect(manifest).toEqual({ version: 1, artifacts: ["agents"] });
+    ) as { version: number; artifacts: Array<{ id: string; destination: string }> };
+    expect(manifest).toEqual({
+      version: 1,
+      artifacts: [{ id: "agents", destination: "AGENTS.md" }],
+    });
     const analysis = JSON.parse(
       await readFile(path.join(repo, ".ai", "repository-analysis.json"), "utf-8"),
     ) as { languages: string[] };
@@ -187,5 +211,74 @@ describe("doozctl init (integration)", () => {
     await expect(
       readFile(path.join(repo, ".ai", "repository-analysis.json"), "utf-8"),
     ).resolves.toBe(await readFile(path.join(repo, ".ai", "repository-analysis.json"), "utf-8"));
+  });
+
+  it("overwrite never destroys a user-owned file during init", async () => {
+    const repo = await tmp("doozctl-init-repo-");
+    const pkg = await tmp("doozctl-init-pkg-");
+    await writeRepo(repo);
+    await writeFile(
+      path.join(repo, ".gitignore"),
+      "# user\n.env\nsecrets/keys.production\n",
+      "utf-8",
+    );
+    await writeCustomPackage(
+      pkg,
+      [
+        {
+          id: "agents",
+          source: "artifacts/AGENTS.md",
+          destination: "AGENTS.md",
+          merge: "managed-blocks",
+          lifecycle: ["init", "sync"],
+        },
+        {
+          id: "gitignore",
+          source: "artifacts/gitignore",
+          destination: ".gitignore",
+          merge: "overwrite",
+          lifecycle: ["init"],
+        },
+      ],
+      { gitignore: "node_modules/\n", "AGENTS.md": MANAGED_TEMPLATE },
+    );
+
+    await expect(app().init([repo, pkg])).rejects.toThrow(/not engine-generated/);
+
+    await expect(readFile(path.join(repo, ".gitignore"), "utf-8")).resolves.toBe(
+      "# user\n.env\nsecrets/keys.production\n",
+    );
+    await expect(readdir(path.join(repo, ".dooz"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("overwrite writes fresh destinations and re-init may rewrite recorded ones", async () => {
+    const repo = await tmp("doozctl-init-repo-");
+    const pkg = await tmp("doozctl-init-pkg-");
+    await writeRepo(repo);
+    await writeCustomPackage(
+      pkg,
+      [
+        {
+          id: "state",
+          source: "artifacts/state.json",
+          destination: ".dooz/state.json",
+          merge: "overwrite",
+          lifecycle: ["init"],
+        },
+      ],
+      { "state.json": '{"render":"v1"}\n' },
+    );
+
+    const run = app();
+    await run.init([repo, pkg]);
+    await expect(readFile(path.join(repo, ".dooz", "state.json"), "utf-8")).resolves.toBe(
+      '{"render":"v1"}\n',
+    );
+
+    await writeFile(path.join(pkg, "artifacts", "state.json"), '{"render":"v2"}\n', "utf-8");
+    await expect(run.init([repo, pkg])).resolves.toBe(0);
+    await expect(readFile(path.join(repo, ".dooz", "state.json"), "utf-8")).resolves.toBe(
+      '{"render":"v2"}\n',
+    );
   });
 });

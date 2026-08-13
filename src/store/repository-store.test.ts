@@ -2,7 +2,6 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { NotImplementedError } from "../errors.js";
 import type { Analysis, Manifest } from "../model/model.js";
 import { RepositoryStore } from "./repository-store.js";
 
@@ -20,7 +19,6 @@ const analysis: Analysis = {
   ci: [],
   docker: false,
   statistics: { totalFiles: 1, sourceFiles: 1, testFiles: 0 },
-  aiFiles: [],
 };
 
 const dirs: string[] = [];
@@ -65,15 +63,5 @@ describe("RepositoryStore", () => {
     await expect(
       readFile(path.join(dir, ".ai", "repository-analysis.json"), "utf-8"),
     ).resolves.toContain('"languages"');
-  });
-
-  it("is scaffolding for context operations", async () => {
-    await expect(store.readContext(".")).rejects.toBeInstanceOf(NotImplementedError);
-    await expect(store.updateContext(".", "content")).rejects.toBeInstanceOf(NotImplementedError);
-  });
-
-  it("is scaffolding for session operations", async () => {
-    await expect(store.createSession(".", "summary")).rejects.toBeInstanceOf(NotImplementedError);
-    await expect(store.listSessions(".")).rejects.toBeInstanceOf(NotImplementedError);
   });
 });

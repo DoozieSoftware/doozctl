@@ -25,15 +25,6 @@
       ]
     },
     {
-      "id": "gitignore",
-      "source": "artifacts/gitignore",
-      "destination": ".gitignore",
-      "merge": "overwrite",
-      "lifecycle": [
-        "init"
-      ]
-    },
-    {
       "id": "current-context",
       "source": "artifacts/current-context.md",
       "destination": ".ai/current-context.md",

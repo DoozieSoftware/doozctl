@@ -19,10 +19,10 @@ doozctl init . ./standards
 
 ## What it installs
 
-| Destination   | Managed blocks                       |
-| ------------- | ------------------------------------ |
-| `AGENTS.md`   | people, workflows, expectations      |
-| `DEVELOPERS.md` | getting-started, contribution      |
+| Destination     | Managed blocks                                  |
+| --------------- | ----------------------------------------------- |
+| `AGENTS.md`     | people, workflows, expectations, session-memory |
+| `DEVELOPERS.md` | getting-started, contribution                   |
 
 Blocks are replaced by `doozctl sync`; everything outside them is preserved.
 

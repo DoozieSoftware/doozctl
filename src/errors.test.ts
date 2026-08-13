@@ -1,14 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { NotImplementedError } from "./errors.js";
+import { UsageError } from "./errors.js";
+import { ExitCode } from "./dispatcher/dispatcher.js";
 
-describe("NotImplementedError", () => {
-  it("carries the module name in its message", () => {
-    const err = new NotImplementedError("analyzer");
-    expect(err.message).toBe("analyzer: not implemented");
-    expect(err.name).toBe("NotImplementedError");
+describe("UsageError", () => {
+  it("carries the message and its name", () => {
+    const err = new UsageError("Usage: doozctl init <repo> <package>");
+    expect(err.message).toContain("Usage: doozctl init");
+    expect(err.name).toBe("UsageError");
+  });
+
+  it("maps to exit code 2", () => {
+    expect(new UsageError("x").exitCode).toBe(ExitCode.Usage);
   });
 
   it("is an instance of Error", () => {
-    expect(new NotImplementedError("loader")).toBeInstanceOf(Error);
+    expect(new UsageError("x")).toBeInstanceOf(Error);
   });
 });

@@ -1,11 +1,17 @@
+import { ExitCode } from "./dispatcher/dispatcher.js";
+
 /**
- * Shared error type for functionality reserved for a later phase.
- * Thrown by scaffolding stubs so the module surface is wired and testable
- * without implementing business logic.
+ * Command-line usage error: the command was invoked with invalid arguments.
+ * Maps to exit code 2, distinct from runtime failures (exit code 1).
  */
-export class NotImplementedError extends Error {
-  constructor(module: string) {
-    super(`${module}: not implemented`);
-    this.name = "NotImplementedError";
+export class UsageError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UsageError";
+  }
+
+  /** The process exit code the CLI should return for this error. */
+  get exitCode(): number {
+    return ExitCode.Usage;
   }
 }

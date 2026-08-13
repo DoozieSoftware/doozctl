@@ -1,6 +1,5 @@
 import type { Artifact, RenderedArtifact, Variables } from "../model/model.js";
 import type { Storage } from "../store/storage.js";
-import type { Renderer } from "./contracts.js";
 
 /**
  * Artifact Renderer: converts an Artifact plus resolved Variables into a
@@ -59,7 +58,7 @@ function format(value: unknown): string {
 }
 
 /** Reads artifact source templates from a package and renders them. */
-export class ArtifactRenderer implements Renderer {
+export class ArtifactRenderer {
   constructor(private readonly templates: Storage) {}
 
   async render(artifact: Artifact, variables: Variables): Promise<RenderedArtifact> {

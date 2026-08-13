@@ -1,14 +1,22 @@
 import type { GitService } from "../infra/git/git.js";
 import { createArtifact } from "../model/artifact.js";
-import type { Manifest, RenderedArtifact, SessionInput, Workflow } from "../model/model.js";
+import type {
+  Artifact,
+  Manifest,
+  RenderedArtifact,
+  SessionInput,
+  Workflow,
+} from "../model/model.js";
 import type { MergeStrategy } from "../model/model.js";
 import type { RepositoryStore } from "../store/repository-store.js";
 import { Storage } from "../store/storage.js";
 import { ArtifactRenderer } from "./artifact-renderer.js";
 import type { Analyzer, StandardsLoader, StrategyMerger, Validator } from "./contracts.js";
 import type { PipelineStep } from "./engine.js";
+import { isGeneratedFile } from "./merge.js";
 import {
   capField,
+  capSessionContent,
   extractPreviousContext,
   parseSessionSections,
   resolveContextFields,
@@ -99,7 +107,8 @@ export interface SessionDeps {
 export function sessionStep(deps: SessionDeps, input: SessionInput): PipelineStep {
   return named("session", async (ctx) => {
     const repo = new Storage(ctx.root);
-    const sections = parseSessionSections(input.content);
+    const content = capSessionContent(input.content);
+    const sections = parseSessionSections(content);
     const previousRaw = await readOrNull(repo, ".ai/current-context.md");
     const previous = extractPreviousContext(previousRaw ?? "");
     const fields = resolveContextFields(sections, previous);
@@ -116,7 +125,7 @@ export function sessionStep(deps: SessionDeps, input: SessionInput): PipelineSte
         user: input.user,
         commit,
         branch,
-        content: input.content,
+        content,
         objective: capField(fields.objective),
         summary: capField(fields.summary),
         decisions: capField(fields.decisions),
@@ -247,10 +256,14 @@ export interface MergeDeps {
 export function mergeStep(deps: MergeDeps): PipelineStep {
   return named("merge", async (ctx) => {
     const repo = new Storage(ctx.root);
+    const owned = await ownedKeys(repo);
     const merged: RenderedArtifact[] = [];
     for (const rendered of ctx.rendered) {
       const artifact = rendered.artifact;
       const existing = await readOrNull(repo, artifact.destination.path);
+      if (existing !== null && artifact.mergeStrategy === "overwrite") {
+        assertOverwriteOwned(artifact, existing, owned);
+      }
       const content = await deps.mergers[artifact.mergeStrategy].merge(
         artifact,
         rendered.content,
@@ -260,6 +273,52 @@ export function mergeStep(deps: MergeDeps): PipelineStep {
     }
     ctx.merged = merged;
   });
+}
+
+/**
+ * Id-destination records in the persisted engine manifest. A missing or
+ * malformed manifest is treated as "nothing owned yet" — the fail-safe
+ * direction. Legacy string records carry no destination and grant no
+ * overwrite ownership.
+ */
+async function ownedKeys(repo: Storage): Promise<Set<string>> {
+  try {
+    const keys = new Set<string>();
+    for (const entry of await readManifestEntries(repo)) {
+      if (entry.destination !== null) {
+        keys.add(ownershipKey(entry.id, entry.destination));
+      }
+    }
+    return keys;
+  } catch {
+    return new Set();
+  }
+}
+
+/** The manifest key that binds an artifact id to its destination. */
+function ownershipKey(id: string, destination: string): string {
+  return `${id}\u0000${destination}`;
+}
+
+/**
+ * First-write ownership guard for the `overwrite` strategy. overwrite may
+ * replace a file the engine created, never a user-owned file. A file is
+ * engine-owned when its artifact id and destination are both recorded in the
+ * manifest, or its first line carries the engine-generated marker. Anything
+ * else fails safe.
+ */
+function assertOverwriteOwned(artifact: Artifact, existing: string, owned: Set<string>): void {
+  if (owned.has(ownershipKey(artifact.id, artifact.destination.path))) {
+    return;
+  }
+  if (isGeneratedFile(existing)) {
+    return;
+  }
+  throw new Error(
+    `destination already exists and is not engine-generated: ${artifact.destination.path}. ` +
+      "overwrite only rewrites files DoozCTL created; the existing file was left untouched. " +
+      "Remove or convert the file, then run the command again.",
+  );
 }
 
 /** Dependencies for the validate step. */
@@ -291,11 +350,11 @@ export interface WriteDeps {
  * (`.ai/repository-analysis.json`). A destination is written only when its
  * content differs from what is already on disk, so re-running init is a no-op.
  *
- * The manifest records every artifact the engine has ever generated. Because a
- * workflow only sees its own lifecycle, the manifest is the union of the
- * previously recorded ids and the ids written by this run — otherwise an
- * init-only artifact would disappear from the manifest the first time sync
- * runs.
+ * The manifest records every artifact the engine has ever generated, bound to
+ * its destination. Because a workflow only sees its own lifecycle, the
+ * manifest is the union of the previously recorded records and the records
+ * written by this run — otherwise an init-only artifact would disappear from
+ * the manifest the first time sync runs.
  */
 export function writeStep(deps: WriteDeps): PipelineStep {
   return named("write", async (ctx) => {
@@ -308,12 +367,13 @@ export function writeStep(deps: WriteDeps): PipelineStep {
       }
       await repo.write(merged.content, dest);
     }
+    const written = ctx.merged.map((m) => ({
+      id: m.artifact.id,
+      destination: m.artifact.destination.path,
+    }));
     await deps.store.saveManifest(ctx.root, {
       version: 1,
-      artifacts: unionIds(
-        await readManifestIds(repo),
-        ctx.merged.map((m) => m.artifact.id),
-      ),
+      artifacts: unionEntries(await readManifestEntries(repo), written),
     });
     if (ctx.analysis !== null) {
       await deps.store.saveAnalysis(ctx.root, ctx.analysis);
@@ -321,8 +381,10 @@ export function writeStep(deps: WriteDeps): PipelineStep {
   });
 }
 
-/** Read the artifact ids recorded in the engine manifest, or [] when absent. */
-async function readManifestIds(repo: Storage): Promise<string[]> {
+/** Read the artifact records in the engine manifest, or [] when absent. */
+async function readManifestEntries(
+  repo: Storage,
+): Promise<Array<{ id: string; destination: string | null }>> {
   const raw = await readOrNull(repo, ".dooz/manifest.json");
   if (raw === null) {
     return [];
@@ -336,19 +398,52 @@ async function readManifestIds(repo: Storage): Promise<string[]> {
   if (!Array.isArray(manifest.artifacts)) {
     throw new Error("malformed manifest: .dooz/manifest.json: artifacts must be an array");
   }
-  return manifest.artifacts.filter((id): id is string => typeof id === "string");
+  const entries: Array<{ id: string; destination: string | null }> = [];
+  for (const entry of manifest.artifacts) {
+    if (typeof entry === "string") {
+      entries.push({ id: entry, destination: null });
+    } else if (
+      entry !== null &&
+      typeof entry === "object" &&
+      typeof (entry as { id?: unknown }).id === "string" &&
+      typeof (entry as { destination?: unknown }).destination === "string"
+    ) {
+      const record = entry as { id: string; destination: string };
+      entries.push({ id: record.id, destination: record.destination });
+    }
+  }
+  return entries;
 }
 
-/** Union preserving first-occurrence order, deterministic across runs. */
-function unionIds(a: readonly string[], b: readonly string[]): string[] {
+/**
+ * Union preserving first-occurrence order, deterministic across runs. Legacy
+ * string records are preserved verbatim (their destinations are unknowable and
+ * they grant no overwrite ownership); current records are bound to their
+ * destination.
+ */
+function unionEntries(
+  a: readonly { id: string; destination: string | null }[],
+  b: readonly { id: string; destination: string }[],
+): Array<{ id: string; destination: string } | string> {
   const seen = new Set<string>();
-  return [...a, ...b].filter((id) => {
-    if (seen.has(id)) {
-      return false;
+  const out: Array<{ id: string; destination: string } | string> = [];
+  for (const entry of [...a, ...b]) {
+    if (entry.destination === null) {
+      if (seen.has(`legacy:${entry.id}`)) {
+        continue;
+      }
+      seen.add(`legacy:${entry.id}`);
+      out.push(entry.id);
+      continue;
     }
-    seen.add(id);
-    return true;
-  });
+    const key = ownershipKey(entry.id, entry.destination);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    out.push({ id: entry.id, destination: entry.destination });
+  }
+  return out;
 }
 
 /** Dependencies for the save-analysis step. */
@@ -392,7 +487,9 @@ export function reportStep(deps: ReportDeps, kind: ReportKind): PipelineStep {
     if (manifest === null) {
       manifest = await readManifestOrNull(deps.store, ctx.root);
     }
-    deps.print(buildDoctorReport(ctx, manifest));
+    const { report, problems } = await buildDoctorReport(ctx, manifest);
+    ctx.doctorProblems = problems;
+    deps.print(report);
   });
 }
 

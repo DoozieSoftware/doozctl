@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Manifest, Session, StandardsPackage } from "./model.js";
+import type { Manifest, StandardsPackage } from "./model.js";
 
 describe("model", () => {
   it("models a standards package manifest", () => {
@@ -17,10 +17,5 @@ describe("model", () => {
   it("models a manifest tracking artifact ids", () => {
     const manifest: Manifest = { version: 1, artifacts: ["agents"] };
     expect(manifest.artifacts).toContain("agents");
-  });
-
-  it("models a session summary", () => {
-    const session: Session = { id: "s1", createdAt: new Date(0), summary: "done" };
-    expect(session.id).toBe("s1");
   });
 });

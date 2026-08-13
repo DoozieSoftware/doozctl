@@ -83,11 +83,19 @@ export function syncPipeline(
 
 /**
  * Doctor: verify the repository is initialized and the Standards Package
- * loads, then report health problems. Never writes. The load-state step
- * short-circuits with a clear error when the repository is not initialized.
+ * loads, re-analyze for live git facts, then report health problems. Never
+ * writes. The load-state step short-circuits with a clear error when the
+ * repository is not initialized.
  */
-export function doctorPipeline(deps: LoadStateDeps & LoadDeps & ReportDeps): PipelineStep[] {
-  return [loadRepositoryStateStep(deps), loadStep(deps), reportStep(deps, "doctor")];
+export function doctorPipeline(
+  deps: LoadStateDeps & LoadDeps & ReportDeps & AnalyzeDeps,
+): PipelineStep[] {
+  return [
+    loadRepositoryStateStep(deps),
+    loadStep(deps),
+    analyzeStep(deps),
+    reportStep(deps, "doctor"),
+  ];
 }
 
 /**

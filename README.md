@@ -17,18 +17,20 @@ Repository
     ↓
 Analyze
     ↓
-Resolve Context
-    ↓
 Load Standards
+    ↓
+Resolve Variables
     ↓
 Render Artifacts
     ↓
 Merge
     ↓
+Validate
+    ↓
 Persist
 ```
 
-It is not an AGENTS.md generator. `AGENTS.md` is simply one artifact. The engine does not know that file exists — or any artifact name, AI vendor, language, or company convention.
+It is not an AGENTS.md generator. `AGENTS.md` is simply one artifact. The engine does not know that file exists — or any artifact name, AI vendor, language, or company convention. The engine's generation path treats every artifact as opaque data; all meaning lives in the external Standards Package.
 
 ## The three products
 
@@ -100,22 +102,25 @@ Every command supports `--help` with usage and an example.
 
 ## Exit codes
 
-| Code | Meaning                                                                    |
-| ---- | -------------------------------------------------------------------------- |
-| `0`  | Success                                                                    |
-| `1`  | Error (missing arguments, uninitialized repository, malformed state, etc.) |
+| Code | Meaning                                                                       |
+| ---- | ----------------------------------------------------------------------------- |
+| `0`  | Success                                                                       |
+| `1`  | Error (missing state, malformed files, refused merges, doctor found problems) |
+| `2`  | Invalid arguments                                                             |
 
 ## Design
 
 - Minimal. Deterministic. Offline. Text-based. Vendor neutral. Artifact driven.
 - Prefer preserving user-authored content over propagating generated content.
 - Brownfield first — the engine merges into existing repositories, never destroys them.
+- `overwrite` never replaces a file the engine did not create: first write of an `overwrite` artifact fails safely when a user-owned file already occupies the destination.
+- Storage is sandboxed against real paths: no read or write may escape the repository through symlinks.
 
 See [ARCHITECTURE.md](https://github.com/DoozieSoftware/doozctl/blob/main/ARCHITECTURE.md) for the layered design and [spec.md](https://github.com/DoozieSoftware/doozctl/blob/main/spec.md) for the frozen specification.
 
 ## Status
 
-All six workflows are implemented and tested (247 tests, 94.6% coverage):
+All six workflows are implemented and tested (267 tests, ~94% coverage):
 
 - ✅ init
 - ✅ sync

@@ -21,6 +21,21 @@ const MANAGED_LINE = /^<!-- DOOZCTL:(BEGIN|END):v1 /;
 /** The generated-file marker line. */
 const GENERATED_LINE = /^<!-- DOOZCTL:GENERATED:v1 ?-->$/;
 
+/** Whether `content` starts with the engine-generated marker. */
+export function isGeneratedFile(content: string): boolean {
+  const firstLine = content.split("\n", 1)[0] as string;
+  return GENERATED_LINE.test(firstLine);
+}
+
+/**
+ * Validate that `content` is a well-formed managed-blocks document (markers
+ * parse, every BEGIN is matched, names are unique, nothing nests). Throws
+ * MergeError when malformed. Used by doctor to check artifact integrity.
+ */
+export function validateManagedBlocks(content: string): void {
+  parseBlocks(content);
+}
+
 /** Error thrown for every malformed or impossible merge. */
 export class MergeError extends Error {
   constructor(message: string) {

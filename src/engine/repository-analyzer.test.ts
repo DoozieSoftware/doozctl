@@ -48,11 +48,6 @@ describe("RepositoryAnalyzer", () => {
     });
   });
 
-  it("detects AI-related files by presence only", async () => {
-    const analysis = await analyze("fixture-node");
-    expect(analysis.aiFiles).toEqual(["AGENTS.md"]);
-  });
-
   it("detects a Laravel/PHP project with GitHub Actions CI", async () => {
     const analysis = await analyze("fixture-laravel");
     expect(analysis.languages).toEqual(["PHP"]);
@@ -102,7 +97,6 @@ describe("RepositoryAnalyzer", () => {
     expect(analysis.buildSystem).toBeNull();
     expect(analysis.ci).toEqual([]);
     expect(analysis.docker).toBe(false);
-    expect(analysis.aiFiles).toEqual([]);
     expect(analysis.statistics).toEqual({ totalFiles: 1, sourceFiles: 0, testFiles: 0 });
   });
 });

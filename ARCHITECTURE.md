@@ -16,7 +16,7 @@ DoozCTL does not define engineering practices. It provides the engine that rende
 
 ## Pipeline
 
-Every command runs the same pipeline as a sequence of independent steps, in order, short-circuiting on the first failure.
+Commands run the pipeline as a sequence of independent steps, in order, short-circuiting on the first failure. Each command selects the steps its workflow requires; read-only commands never reach write.
 
 ```text
 Repository
@@ -47,7 +47,7 @@ Application    — use cases per command, own pipeline     (src/app)
 Steps          — pipeline step factories                 (src/engine/steps)
 Engine         — ordered step execution                  (src/engine/engine)
 Contracts      — extension seams (analyzer, loader,
-                 renderer, merger, validator)            (src/engine/contracts)
+                 merger, validator)                      (src/engine/contracts)
 Model          — frozen domain types                     (src/model)
 Infra          — git service                             (src/infra)
 Store          — sandboxed storage, json, repository state (src/store)
@@ -66,7 +66,6 @@ src/
               analyzer, variable-resolver, loader, renderer, merge
   infra/      git
   model/      canonical domain types
-  plugin/     extension scaffolding
   store/      storage abstraction, json, repository state
 tests/
   fixtures/   representative repositories (laravel, node, react, empty)
@@ -120,10 +119,16 @@ Four strategies, frozen:
 
 | Strategy            | Behavior                                                         | Use                                             |
 | ------------------- | ---------------------------------------------------------------- | ----------------------------------------------- |
-| `overwrite`         | Replace entirely                                                 | generated machine state (`.dooz/manifest.json`) |
+| `overwrite`         | Replace entirely; guarded by first-write ownership               | generated machine state (`.dooz/manifest.json`) |
 | `append`            | Add after, never modify                                          | immutable session files (summarize lifecycle)   |
 | `replace-generated` | Replace only if the file carries the generated marker, else fail | wrapper files                                   |
 | `managed-blocks`    | Replace only inside marked regions, preserve everything else     | developer-facing files                          |
+
+First-write ownership: `overwrite` only replaces files the engine created —
+the artifact id and destination are both recorded in the manifest, or the file
+carries the generated marker. A pre-existing user-owned destination fails
+safely and stays untouched. Ownership is bound to the destination: reusing a
+recorded id at a different destination grants nothing.
 
 Managed block markers, frozen forever:
 
@@ -140,13 +145,21 @@ A missing destination is written directly; merge applies only to files that alre
 ## Generated State
 
 ```text
-.dooz/  manifest.json        engine state (which artifacts were generated)
-.ai/    current-context.md   AI-readable memory
+.dooz/  manifest.json        engine state (which artifacts were generated,
+                             each bound to its destination)
+.ai/    current-context.md   AI-readable memory (declared artifact, summarize)
         repository-analysis.json
-        sessions/            immutable session summaries
+        sessions/            immutable session summaries (declared artifacts)
 ```
 
-These files belong to the engine and are regenerated as required.
+`.dooz/manifest.json` and `.ai/repository-analysis.json` are engine state,
+written directly. `.ai/current-context.md` and `.ai/sessions/` are artifacts
+declared by the Standards Package — the engine renders them like any other
+artifact; the package defines their shape.
+
+Storage enforces sandbox containment against real filesystem paths: symlinks
+inside the repository — including dangling symlinks — cannot be used to read
+or write outside it.
 
 ## Guiding Principles
 

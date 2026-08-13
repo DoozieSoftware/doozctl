@@ -11,6 +11,7 @@ import { CommanderError } from "commander";
 import { App, type AppDeps } from "./app/app.js";
 import { buildProgram, ExitCodeError, humanizeError } from "./cli/cli.js";
 import { Dispatcher, ExitCode } from "./dispatcher/dispatcher.js";
+import { UsageError } from "./errors.js";
 import { Engine } from "./engine/engine.js";
 import {
   builtinMergers,
@@ -59,6 +60,9 @@ async function main(): Promise<number> {
     return ExitCode.OK;
   } catch (err) {
     if (err instanceof ExitCodeError) {
+      return err.exitCode;
+    }
+    if (err instanceof UsageError) {
       return err.exitCode;
     }
     if (err instanceof CommanderError) {

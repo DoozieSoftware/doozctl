@@ -1,5 +1,4 @@
-import { NotImplementedError } from "../errors.js";
-import type { Analysis, Manifest, Session } from "../model/model.js";
+import type { Analysis, Manifest } from "../model/model.js";
 import { parseJson, serializeJson } from "./json.js";
 import { Storage } from "./storage.js";
 
@@ -8,12 +7,10 @@ import { Storage } from "./storage.js";
  *
  *   .dooz/manifest.json
  *   .ai/repository-analysis.json
- *   .ai/current-context.md
- *   .ai/sessions/
  *
- * These files belong to the engine and are regenerated as required. Writes are
- * atomic and deterministic (canonical JSON). Context and session operations are
- * scaffolding until a later phase implements them.
+ * `.ai/current-context.md` and `.ai/sessions/` are artifacts declared by the
+ * Standards Package (the summarize lifecycle), not engine-internal state.
+ * Writes are atomic and deterministic (canonical JSON).
  */
 export class RepositoryStore {
   /** Load the manifest. */
@@ -66,25 +63,5 @@ export class RepositoryStore {
     } catch {
       return false;
     }
-  }
-
-  /** Read the current context. */
-  readContext(_dir: string): Promise<string> {
-    return Promise.reject(new NotImplementedError("store.context"));
-  }
-
-  /** Replace the current context. */
-  updateContext(_dir: string, _content: string): Promise<void> {
-    return Promise.reject(new NotImplementedError("store.context"));
-  }
-
-  /** Create an immutable session summary. */
-  createSession(_dir: string, _summary: string): Promise<Session> {
-    return Promise.reject(new NotImplementedError("store.session"));
-  }
-
-  /** List sessions, newest first. */
-  listSessions(_dir: string): Promise<Session[]> {
-    return Promise.reject(new NotImplementedError("store.session"));
   }
 }

@@ -145,20 +145,6 @@ const CI_PROVIDERS: Array<[string, string]> = [
   [".travis.yml", "travis"],
 ];
 
-/** AI-related files detected by presence only, never interpreted. */
-const AI_FILE_PATTERNS: string[] = [
-  "AGENTS.md",
-  "CLAUDE.md",
-  "CODEX.md",
-  "GEMINI.md",
-  "CURSOR.md",
-  "RULES.md",
-  ".cursorrules",
-  ".cursor/",
-  ".claude/",
-  ".github/copilot-instructions.md",
-];
-
 /** Detect whether a file name looks like a test file. */
 function isTestFile(rel: string): boolean {
   const base = path.basename(rel);
@@ -215,7 +201,6 @@ export class RepositoryAnalyzer implements Analyzer {
       ci: this.detectCi(files),
       docker: this.detectDocker(files),
       statistics: this.computeStatistics(files),
-      aiFiles: this.detectAiFiles(files),
     };
   }
 
@@ -388,22 +373,6 @@ export class RepositoryAnalyzer implements Analyzer {
       }
     }
     return { totalFiles: files.length, sourceFiles, testFiles };
-  }
-
-  private detectAiFiles(files: string[]): string[] {
-    const found = new Set<string>();
-    for (const file of files) {
-      for (const pattern of AI_FILE_PATTERNS) {
-        if (pattern.endsWith("/")) {
-          if (file === pattern.slice(0, -1) || file.startsWith(pattern)) {
-            found.add(pattern.slice(0, -1));
-          }
-        } else if (file === pattern) {
-          found.add(pattern);
-        }
-      }
-    }
-    return [...found].sort();
   }
 
   private async readText(root: string, rel: string): Promise<string | null> {

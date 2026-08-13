@@ -41,6 +41,8 @@ export interface ExecutionContext {
   rendered: RenderedArtifact[];
   /** Merged artifacts (filled by merge, consumed by write). */
   merged: RenderedArtifact[];
+  /** Problems the doctor step found; empty when the repository is healthy. */
+  doctorProblems: string[];
 }
 
 /** A single pipeline step. */
@@ -52,9 +54,9 @@ export interface EngineOptions {
   standardsDir: string;
 }
 
-/** Executes the given pipeline steps in order. */
+/** Executes the given pipeline steps in order, returning the execution context. */
 export class Engine {
-  async run(options: EngineOptions, steps: PipelineStep[]): Promise<void> {
+  async run(options: EngineOptions, steps: PipelineStep[]): Promise<ExecutionContext> {
     const ctx: ExecutionContext = {
       root: options.root,
       standardsDir: options.standardsDir,
@@ -65,9 +67,11 @@ export class Engine {
       manifest: null,
       rendered: [],
       merged: [],
+      doctorProblems: [],
     };
     for (const step of steps) {
       await step(ctx);
     }
+    return ctx;
   }
 }

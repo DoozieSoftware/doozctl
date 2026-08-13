@@ -44,7 +44,10 @@
       </div>
       <div class="command">
         <div class="name">doozctl doctor &lt;repo&gt; &lt;package&gt;</div>
-        <p>Verify the repository is initialized, the package loads, and artifacts are recorded.</p>
+        <p>
+          Verify initialization, package validity, artifact coverage and managed-block integrity.
+          Exits <code>0</code> when healthy and <code>1</code> when problems are found.
+        </p>
       </div>
       <div class="command">
         <div class="name">doozctl status [repo]</div>
@@ -66,7 +69,11 @@
           </tr>
           <tr>
             <td><code>1</code></td>
-            <td>Error (missing arguments, uninitialized repository, malformed state)</td>
+            <td>Error (missing state, malformed files, refused merges, doctor problems)</td>
+          </tr>
+          <tr>
+            <td><code>2</code></td>
+            <td>Invalid arguments</td>
           </tr>
         </tbody>
       </table>

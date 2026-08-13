@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   capField,
+  capSessionContent,
   extractPreviousContext,
   formatSessionId,
   MAX_CONTEXT_FIELD_CHARS,
   parseSessionSections,
   resolveContextFields,
   resolveDestinationTemplate,
+  SESSION_CONTENT_BUDGET,
   toLocalIso,
 } from "./session.js";
 
@@ -129,6 +131,25 @@ describe("capField", () => {
     expect(capped.length).toBe(MAX_CONTEXT_FIELD_CHARS + 1);
     expect(capped.endsWith("…")).toBe(true);
     expect(capped.slice(0, MAX_CONTEXT_FIELD_CHARS)).toBe("x".repeat(MAX_CONTEXT_FIELD_CHARS));
+  });
+});
+
+describe("capSessionContent", () => {
+  it("leaves content within the budget unchanged", () => {
+    const content = "## Summary\nshort\n";
+    expect(capSessionContent(content)).toBe(content);
+  });
+
+  it("truncates over-budget content with a notice", () => {
+    const long = "## Summary\n" + "x".repeat(SESSION_CONTENT_BUDGET + 10);
+    const capped = capSessionContent(long);
+    expect(capped.length).toBeLessThan(SESSION_CONTENT_BUDGET + 100);
+    expect(capped).toContain("[truncated");
+  });
+
+  it("is deterministic", () => {
+    const long = "y".repeat(SESSION_CONTENT_BUDGET + 500);
+    expect(capSessionContent(long)).toBe(capSessionContent(long));
   });
 });
 

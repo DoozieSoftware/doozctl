@@ -338,8 +338,11 @@ describe("doozctl sync (integration)", () => {
     );
     const manifest = JSON.parse(
       await readFile(path.join(repo, ".dooz", "manifest.json"), "utf-8"),
-    ) as { artifacts: string[] };
-    expect(manifest.artifacts).toEqual(["gitignore", "agents"]);
+    ) as { artifacts: Array<{ id: string; destination: string } | string> };
+    expect(manifest.artifacts).toEqual([
+      { id: "gitignore", destination: ".gitignore" },
+      { id: "agents", destination: "AGENTS.md" },
+    ]);
   });
 
   it("replace-generated rewrites only engine-generated files", async () => {

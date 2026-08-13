@@ -60,9 +60,10 @@ describe("command pipelines", () => {
     expect(steps.map(fnOf)).toContain("lifecycleStep");
   });
 
-  it("doctor verifies initialization and reports, never writing", () => {
+  it("doctor verifies initialization, re-checks live state, reports, and never writes", () => {
     const steps = doctorPipeline(deps);
-    expect(steps.map(fnOf)).toEqual(["loadStateStep", "loadStep", "reportStep"]);
+    expect(steps.map(fnOf)).toEqual(["loadStateStep", "loadStep", "analyzeStep", "reportStep"]);
+    expect(steps.map(fnOf)).not.toContain("writeStep");
   });
 
   it("status is read-only and never writes", () => {

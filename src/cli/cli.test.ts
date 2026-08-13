@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Writable } from "node:stream";
 import { Dispatcher, ExitCode } from "../dispatcher/dispatcher.js";
+import { UsageError } from "../errors.js";
 import { buildProgram, humanizeError, runCli, VERSION } from "./cli.js";
 
 function capture(): { stdout: Writable; stderr: Writable; out: () => string; err: () => string } {
@@ -88,6 +89,17 @@ describe("runCli", () => {
     const code = await runCli(["boom"], dispatcherWith(), streams);
     expect(code).toBe(ExitCode.Error);
     expect(streams.err()).toContain("kaboom");
+  });
+
+  it("maps usage errors to exit code 2", async () => {
+    const streams = capture();
+    const d = new Dispatcher();
+    d.register("usage", async () => {
+      throw new UsageError("Usage: doozctl usage <x>");
+    });
+    const code = await runCli(["usage"], d, streams);
+    expect(code).toBe(ExitCode.Usage);
+    expect(streams.err()).toContain("Usage: doozctl usage");
   });
 
   it("prints help and returns 0 when no command is given", async () => {

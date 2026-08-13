@@ -31,7 +31,9 @@ Only what a Standards Package declares, and only per the merge strategy:
 - `managed-blocks` rewrites only content inside its markers; your notes outside
   survive every sync.
 - `replace-generated` only rewrites files that carry the generated marker.
-- `overwrite` replaces the whole file (declare this deliberately).
+- `overwrite` replaces a file only when DoozCTL created it — a pre-existing
+  user-owned file is never replaced; init/sync fails safely and leaves it
+  untouched.
 - `append` never modifies — it adds after.
 
 ## Does it work on existing repositories?
@@ -58,6 +60,13 @@ registry or plugin system. See the [spec](spec.md) and a copyable
 
 Sessions are immutable. The id is `YYYY-MM-DD_HHMMSS`; two `summarize` runs in
 the same second fail rather than overwrite. Wait one second and run again.
+
+## Can session files grow without bound?
+
+No. Raw session content over ~12 KB is truncated with a notice, and each
+current-context field is capped at 400 characters, so the repository memory
+stays compact. The Standards Package instructs agents to summarize durable
+engineering context only — not transcripts or logs.
 
 ## How do I update the managed content?
 

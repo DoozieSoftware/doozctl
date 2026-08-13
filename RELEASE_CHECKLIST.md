@@ -65,9 +65,8 @@
 ## Stage G — Release Review
 
 - [x] Independent product review (staff-engineer lens) — found and fixed `analyze` writing into uninitialized repositories; all commands now error cleanly when uninitialized
-- [x] `v1.0.0-rc.1` tag created (local; awaiting push/approval)
-- [ ] External review
-- [ ] `v1.0.0`
+- [x] `v1.0.0` tag created locally (2026-08-13) — frozen release line `release/v1`; npm publish and GitHub release intentionally not automated
+- [ ] External review (open after local freeze)
 
 > GitHub repo: `DoozieSoftware/doozctl` (public). All docs/links repointed from
 > the inaccessible `dooziesoft` slug to `DoozieSoftware`. npm package scope

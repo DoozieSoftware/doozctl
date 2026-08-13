@@ -1,6 +1,6 @@
 {
   "name": "@dooziesoft/doozctl",
-  "version": "1.0.0-rc.3",
+  "version": "1.0.0",
   "description": "A repository standards engine: turns repository knowledge into persistent, deterministic artifacts every AI assistant can share.",
   "type": "module",
   "license": "MIT",

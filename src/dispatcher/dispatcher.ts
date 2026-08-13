@@ -8,7 +8,10 @@
 /** Exit codes shared across command handlers. */
 export enum ExitCode {
   OK = 0,
+  /** Runtime failure: missing state, malformed files, refused merges, etc. */
   Error = 1,
+  /** The command was invoked with invalid arguments. */
+  Usage = 2,
 }
 
 /** A handler for a single command. */

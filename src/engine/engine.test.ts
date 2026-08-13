@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { Engine, type PipelineStep } from "./engine.js";
-import { NotImplementedError } from "../errors.js";
 
 describe("Engine", () => {
   it("runs steps in order until the first failure", async () => {
@@ -50,14 +49,14 @@ describe("Engine", () => {
     expect(calls).toEqual(["only"]);
   });
 
-  it("default steps are scaffolding", async () => {
+  it("returns the execution context after a run", async () => {
     const engine = new Engine();
-    await expect(
-      engine.run({ root: ".", standardsDir: "" }, [
-        async () => {
-          throw new NotImplementedError("engine");
-        },
-      ]),
-    ).rejects.toBeInstanceOf(NotImplementedError);
+    const ctx = await engine.run({ root: "/repo", standardsDir: "/pkg" }, [
+      async (c) => {
+        c.doctorProblems.push("problem");
+      },
+    ]);
+    expect(ctx.root).toBe("/repo");
+    expect(ctx.doctorProblems).toEqual(["problem"]);
   });
 });

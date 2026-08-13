@@ -3,8 +3,18 @@
   "version": "0.1.0",
   "description": "Sample standards package for DoozCTL. A starting point to copy and adapt, not policy.",
   "license": "MIT",
-  "keywords": ["doozctl", "standards", "template", "ai", "agents"],
-  "files": ["agent-instructions.md", "developers.md", "README.md"],
+  "keywords": [
+    "doozctl",
+    "standards",
+    "template",
+    "ai",
+    "agents"
+  ],
+  "files": [
+    "agent-instructions.md",
+    "developers.md",
+    "README.md"
+  ],
   "publishConfig": {
     "access": "public"
   },
@@ -16,14 +26,20 @@
       "source": "agent-instructions.md",
       "destination": "AGENTS.md",
       "merge": "managed-blocks",
-      "lifecycle": ["init", "sync"]
+      "lifecycle": [
+        "init",
+        "sync"
+      ]
     },
     {
       "id": "developer-instructions",
       "source": "developers.md",
       "destination": "DEVELOPERS.md",
       "merge": "managed-blocks",
-      "lifecycle": ["init", "sync"]
+      "lifecycle": [
+        "init",
+        "sync"
+      ]
     }
   ]
 }

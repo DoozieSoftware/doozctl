@@ -34,6 +34,6 @@ trust and adopt DoozCTL?**
 ## Later
 
 - Standards Package registry (`doozctl install @dooziesoft/standards-laravel`).
-- Plugin discovery for custom analyzers, loaders, and merge strategies (the
-  seams already exist in `src/engine/contracts.ts`).
+- Plugin discovery for custom analyzers, loaders, and merge strategies — only
+  if a concrete consumer needs it; the engine deliberately ships none today.
 - Website: `ctl.dooziesoft.com` (documentation, not marketing).
