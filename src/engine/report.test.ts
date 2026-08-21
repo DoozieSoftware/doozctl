@@ -617,4 +617,48 @@ describe("buildVerifyReport", () => {
       "Plan punch-sync uses workflow 'bug-fix', which declares an invalid evidence requirement: tsets.",
     );
   });
+
+  it("checks changelog and version evidence at the paths the workflow declares", async () => {
+    const dir = await tmp();
+    await adoptWorkflow(
+      dir,
+      "release",
+      "adopted",
+      workflowWithEvidence("release", ["changelog: CHANGELOG.md", "version: package.json"]),
+    );
+    await writePlan(dir, { id: "august-release", method: "release", status: "TESTED" });
+    await writeFile(path.join(dir, "CHANGELOG.md"), "# Changelog\n\n## 1.2.3\n- Fixed.\n");
+    await writeFile(path.join(dir, "package.json"), '{\n  "version": "1.2.3"\n}\n');
+
+    const ready = await buildVerifyReport(dir, analysis(dir), planStore, git(false));
+    expect(ready.problems).toEqual([]);
+    expect(ready.report).toContain("Changelog             ✓");
+    expect(ready.report).toContain("Version               ✓");
+
+    // An empty changelog records no evidence; a version file without a
+    // semantic version does not count.
+    await writeFile(path.join(dir, "CHANGELOG.md"), "");
+    await writeFile(path.join(dir, "package.json"), '{\n  "name": "x"\n}\n');
+    const missing = await buildVerifyReport(dir, analysis(dir), planStore, git(false));
+    expect(missing.problems).not.toEqual([]);
+    expect(missing.report).toContain(
+      "Missing:\n  Changelog (CHANGELOG.md)\n  Version (package.json)",
+    );
+  });
+
+  it("reports a traversal path declaration as an invalid evidence requirement", async () => {
+    const dir = await tmp();
+    await adoptWorkflow(
+      dir,
+      "bug-fix",
+      "adopted",
+      workflowWithEvidence("bug-fix", ["changelog: ../escape.md"]),
+    );
+    await writePlan(dir, { id: "punch-sync", method: "bug-fix", status: "EXECUTING" });
+
+    const { report, problems } = await buildVerifyReport(dir, analysis(dir), planStore, git(false));
+
+    expect(problems).not.toEqual([]);
+    expect(report).toContain("invalid evidence requirement: changelog: ../escape.md");
+  });
 });

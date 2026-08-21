@@ -1,7 +1,7 @@
 # DoozCTL Workflow Specification
 
-**Version:** 1.1.0 (v2 Workflow contract)
-**Status:** Frozen — v2 Phase 2.1 · amended v2 Phase 2.6 (canonical evidence checklist)
+**Version:** 1.2.0 (v2 Workflow contract)
+**Status:** Frozen — v2 Phase 2.1 · amended v2 Phase 2.6 (canonical evidence checklist) · v2 Phase 2.10 (path-bound evidence)
 **Part of:** [V2-SPEC.md](./V2-SPEC.md) · see [PLAN-SPEC.md](./PLAN-SPEC.md) for the Plan contract
 
 ---
@@ -94,21 +94,25 @@ one of the closed vocabulary below:
 
 ```markdown
 - [ ] acceptance-criteria
-- [ ] verification
-- [ ] tests
+- [ ] changelog:<path>
 - [ ] commit
 - [ ] git-state
 - [ ] release
+- [ ] tests
+- [ ] verification
+- [ ] version:<path>
 ```
 
 | Category              | Deterministic check (read-only)                    | Grounded in                    |
 | --------------------- | -------------------------------------------------- | ------------------------------ |
 | `acceptance-criteria` | plan `## Acceptance Criteria` section is non-empty | PLAN-SPEC (Canonical Template) |
-| `verification`        | plan `## Verification` section is non-empty        | PLAN-SPEC (Evidence)           |
-| `tests`               | plan `## Test Evidence` section is non-empty       | PLAN-SPEC (Evidence)           |
+| `changelog:<path>`    | `<path>` exists and is non-empty                   | Repository file (read-only)    |
 | `commit`              | plan `## Commit` section is non-empty              | PLAN-SPEC (Plans and Git)      |
 | `git-state`           | repository is inside a git repository              | Git facts (read-only)          |
 | `release`             | HEAD carries a git tag                             | Git facts (read-only)          |
+| `tests`               | plan `## Test Evidence` section is non-empty       | PLAN-SPEC (Evidence)           |
+| `verification`        | plan `## Verification` section is non-empty        | PLAN-SPEC (Evidence)           |
+| `version:<path>`      | `<path>` exists and contains a semantic version    | Repository file (read-only)    |
 
 Rules:
 
@@ -123,14 +127,22 @@ Rules:
 6. Plain bullets and paragraphs in `## Required Evidence` are human
    requirements. They are reported as manual evidence — never machine-checked,
    and they never gate a verification result.
+7. The path-bound categories (`changelog`, `version`) take exactly one
+   repository-relative file path after a colon (`- [ ] changelog:
+CHANGELOG.md`). Their bare form is invalid, attaching a path to a
+   path-free category is invalid, and `<path>` must be relative with forward
+   slashes and no `..` segments — violations are invalid requirements. The
+   path lives in the workflow document: standards packages and projects own
+   file locations; the engine never hard-codes them.
+8. A semantic version is three dot-separated numbers (`1.2.3`) — an industry
+   form, not a policy. Whether a version "matches the expected release" is
+   overlay or human territory; the engine only checks presence.
 
 The engine checks the **presence of recorded evidence**, never its quality or
-truthfulness, and never executes commands to produce it. Engine support for
-these checks lands with `doozctl verify` (Phase 2.8); until then no engine
-behavior depends on this section. Extending the vocabulary is a deliberate,
-versioned contract change — one table row plus one deterministic check. There
-are no operators, no composition, no conditionals and no execution semantics:
-this is a vocabulary, not a language.
+truthfulness, and never executes commands to produce it. Extending the
+vocabulary is a deliberate, versioned contract change — one table row plus one
+deterministic check. There are no operators, no composition, no conditionals
+and no execution semantics: this is a vocabulary, not a language.
 
 ---
 
@@ -513,6 +525,10 @@ A workflow method is not:
 
 # Amendments
 
+- **1.2.0 — Phase 2.10:** `changelog` and `version` joined the canonical
+  vocabulary as path-bound categories (`category:<path>`), letting standards
+  packages and projects declare change-record and version evidence without
+  the engine hard-coding file locations.
 - **1.1.0 — Phase 2.6:** `## Required Evidence` gained a machine-checkable
   form: canonical evidence categories declared as Markdown checklist items.
   Prose bullets remain valid and are never machine-checked. No other section

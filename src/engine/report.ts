@@ -13,7 +13,11 @@ import {
 import type { PlanStore } from "../store/plan-store.js";
 import { Storage } from "../store/storage.js";
 import { resolveAdoptedWorkflow } from "../workflows/adoption.js";
-import { parseEvidenceRequirements, type EvidenceCategory } from "../workflows/evidence.js";
+import {
+  parseEvidenceRequirements,
+  type EvidenceCategory,
+  type EvidenceRequirement,
+} from "../workflows/evidence.js";
 import type { ExecutionContext } from "./engine.js";
 import { validateManagedBlocks } from "./merge.js";
 
@@ -241,35 +245,71 @@ export interface VerifyGit {
 /** Human-readable label and missing-detail per canonical evidence category. */
 const EVIDENCE_LABELS: Record<EvidenceCategory, { label: string; missing: string }> = {
   "acceptance-criteria": { label: "Acceptance criteria", missing: "Acceptance criteria" },
+  changelog: { label: "Changelog", missing: "Changelog" },
   tests: { label: "Tests", missing: "Tests" },
   verification: { label: "Verification", missing: "Verification" },
   commit: { label: "Commit", missing: "Commit" },
   "git-state": { label: "Git state", missing: "Git repository" },
   release: { label: "Release", missing: "Release tag" },
+  version: { label: "Version", missing: "Version" },
 };
 
 /**
- * Whether the plan records evidence for a plan-section-backed category, or
- * undefined when the category is checked against git facts instead.
+ * Whether a path-bound file exists with usable content. The parser guarantees
+ * `path` is set and safe for these categories; a readable but non-matching
+ * file counts as absent evidence.
  */
-function planEvidencePresent(category: EvidenceCategory, plan: Plan): boolean | undefined {
-  switch (category) {
+async function boundFilePresent(
+  root: string,
+  path: string | undefined,
+  matches: (content: string) => boolean,
+): Promise<boolean> {
+  if (path === undefined) {
+    return false;
+  }
+  let content: string;
+  try {
+    content = await new Storage(root).read(...path.split("/"));
+  } catch {
+    return false;
+  }
+  return content.trim() !== "" && matches(content);
+}
+
+/** Semantic-version form: three dot-separated numbers (industry standard). */
+const SEMVER_PATTERN = /\d+\.\d+\.\d+/;
+
+/** Evaluate one declared requirement against recorded evidence and facts. */
+async function evaluateRequirement(
+  root: string,
+  requirement: EvidenceRequirement,
+  plan: Plan,
+  analysis: Analysis,
+  git: VerifyGit,
+): Promise<boolean> {
+  switch (requirement.category) {
     case "acceptance-criteria":
       return planSection(plan.content, "Acceptance Criteria") !== "";
-    case "verification":
-      return planSection(plan.content, "Verification") !== "";
-    case "tests":
-      return planSection(plan.content, "Test Evidence") !== "";
+    case "changelog":
+      return boundFilePresent(root, requirement.path, () => true);
     case "commit":
       return planSection(plan.content, "Commit") !== "";
-    default:
-      return undefined;
+    case "git-state":
+      return analysis.git.isRepository;
+    case "release":
+      return git.headTagged(root);
+    case "tests":
+      return planSection(plan.content, "Test Evidence") !== "";
+    case "verification":
+      return planSection(plan.content, "Verification") !== "";
+    case "version":
+      return boundFilePresent(root, requirement.path, (content) => SEMVER_PATTERN.test(content));
   }
 }
 
 /**
  * Verify: determine whether the active Plan has the required evidence per its
- * adopted workflow (WORKFLOW-SPEC v1.1.0). Read-only — it checks the presence
+ * adopted workflow (WORKFLOW-SPEC). Read-only — it checks the presence
  * of recorded evidence and git facts; it never runs commands, never judges
  * quality, and never writes.
  */
@@ -344,16 +384,10 @@ export async function buildVerifyReport(
   if (requirements.length === 0 && manual.length === 0) {
     lines.push("  Workflow declares no required evidence.");
   }
-  for (const category of requirements) {
-    const fromPlan = planEvidencePresent(category, plan);
-    const present =
-      fromPlan !== undefined
-        ? fromPlan
-        : category === "git-state"
-          ? analysis.git.isRepository
-          : await git.headTagged(root);
-    let row = `  ${EVIDENCE_LABELS[category].label.padEnd(22)}${present ? "✓" : "✗"}`;
-    if (category === "tests") {
+  for (const requirement of requirements) {
+    const present = await evaluateRequirement(root, requirement, plan, analysis, git);
+    let row = `  ${EVIDENCE_LABELS[requirement.category].label.padEnd(22)}${present ? "✓" : "✗"}`;
+    if (requirement.category === "tests") {
       const facts = describeTestFacts(analysis);
       if (facts !== null) {
         row += `  ${facts}`;
@@ -361,7 +395,8 @@ export async function buildVerifyReport(
     }
     lines.push(row);
     if (!present) {
-      missing.push(EVIDENCE_LABELS[category].missing);
+      const detail = EVIDENCE_LABELS[requirement.category].missing;
+      missing.push(requirement.path !== undefined ? `${detail} (${requirement.path})` : detail);
     }
   }
   if (manual.length > 0) {

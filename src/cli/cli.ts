@@ -185,7 +185,8 @@ export function humanizeError(error: unknown): string {
   if (message.startsWith("invalid evidence requirement:")) {
     return [
       `${message}.`,
-      "Valid evidence categories are: acceptance-criteria, commit, git-state, release, tests, verification.",
+      "Valid evidence categories are: acceptance-criteria, commit, git-state, release, tests, verification,",
+      "plus changelog:<path> and version:<path>, which take a repository-relative file path.",
       "Fix the `## Required Evidence` checklist in the workflow document, then run the command again.",
     ].join("\n");
   }

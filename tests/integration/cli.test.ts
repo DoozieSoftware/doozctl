@@ -722,6 +722,54 @@ describe("doozctl CLI (integration)", () => {
     expect(streams.out()).toContain("DoozCTL is not initialized in this repository.");
   });
 
+  it("verify checks changelog and version evidence at workflow-declared paths", async () => {
+    const { repo, pkg } = await makeRepoAndPackage();
+    await adoptWorkflow(repo, "release");
+    await writeFile(
+      path.join(repo, ".dooz", "workflows", "adopted", "release.md"),
+      [
+        "# Release",
+        "",
+        "## Metadata",
+        "",
+        "- id: release",
+        "",
+        "## Required Evidence",
+        "",
+        "- [ ] changelog: CHANGELOG.md",
+        "- [ ] version: package.json",
+      ].join("\n"),
+      "utf-8",
+    );
+    await writePlanFile(repo, "august-release", "release", "TESTED");
+    const streams = capture();
+    const app = new App(new Engine(), {
+      ...buildDeps(),
+      print: (message) => streams.stdout.write(message + "\n"),
+    });
+    const dispatcher = new Dispatcher()
+      .register("init", app.init.bind(app))
+      .register("verify", app.verify.bind(app));
+
+    await runCli(["init", repo, pkg], dispatcher, streams);
+
+    // No changelog or version file yet → NOT READY with path-qualified missing.
+    const before = await runCli(["verify", repo], dispatcher, streams);
+    expect(before).toBe(1);
+    expect(streams.out()).toContain(
+      "Missing:\n  Changelog (CHANGELOG.md)\n  Version (package.json)",
+    );
+
+    // The project records its change record and version → READY.
+    await writeFile(path.join(repo, "CHANGELOG.md"), "# Changelog\n\n## 1.2.3\n- Released.\n");
+    await writeFile(path.join(repo, "package.json"), '{\n  "version": "1.2.3"\n}\n');
+    const after = await runCli(["verify", repo], dispatcher, streams);
+    expect(after).toBe(0);
+    expect(streams.out()).toContain("Changelog             ✓");
+    expect(streams.out()).toContain("Version               ✓");
+    expect(streams.out()).toContain("Result\n  READY");
+  });
+
   it("renders a deterministic help snapshot", async () => {
     const streams = capture();
     const code = await runCli(["--help"], buildDispatcher(), {

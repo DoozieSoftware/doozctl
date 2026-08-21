@@ -129,6 +129,7 @@ describe("humanizeError", () => {
     expect(message).toContain(
       "acceptance-criteria, commit, git-state, release, tests, verification",
     );
+    expect(message).toContain("changelog:<path> and version:<path>");
     expect(message).toContain("## Required Evidence");
   });
 });
