@@ -27,6 +27,7 @@ import {
   resolveAdoptedWorkflow,
   type AdoptedWorkflow,
 } from "../workflows/adoption.js";
+import { parseEvidenceRequirements } from "../workflows/evidence.js";
 import { UsageError } from "../errors.js";
 import { ExitCode } from "../dispatcher/dispatcher.js";
 import { readFile } from "node:fs/promises";
@@ -258,7 +259,10 @@ export class App {
 
   /**
    * Resolve a workflow method id against the repository control plane,
-   * mapping an unadopted or invalid id to a usage error.
+   * mapping an unadopted or invalid id to a usage error. A resolved workflow
+   * whose evidence declarations are invalid (WORKFLOW-SPEC v1.1.0: unknown
+   * checklist categories) fails loudly — plans are never minted against an
+   * unvalidatable contract.
    */
   private async resolveWorkflow(root: string, methodId: string): Promise<AdoptedWorkflow> {
     if (!isValidWorkflowMethodId(methodId)) {
@@ -266,8 +270,9 @@ export class App {
         `invalid plan method: ${methodId}. Workflow method ids are lowercase kebab-case (e.g. bug-fix).`,
       );
     }
+    let workflow: AdoptedWorkflow;
     try {
-      return await resolveAdoptedWorkflow(root, methodId);
+      workflow = await resolveAdoptedWorkflow(root, methodId);
     } catch (error) {
       if (error instanceof Error && error.message.startsWith("workflow method not adopted:")) {
         throw new UsageError(
@@ -277,6 +282,13 @@ export class App {
       }
       throw error;
     }
+    const { invalid } = parseEvidenceRequirements(workflow.content);
+    if (invalid.length > 0) {
+      throw new Error(
+        `invalid evidence requirement: ${invalid.join(", ")} (workflow '${workflow.id}')`,
+      );
+    }
+    return workflow;
   }
 
   /** The concise creation report printed to the user. */

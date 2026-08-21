@@ -11,6 +11,7 @@ import {
 import type { PlanStore } from "../store/plan-store.js";
 import { Storage } from "../store/storage.js";
 import { resolveAdoptedWorkflow } from "../workflows/adoption.js";
+import { parseEvidenceRequirements } from "../workflows/evidence.js";
 import type { ExecutionContext } from "./engine.js";
 import { validateManagedBlocks } from "./merge.js";
 
@@ -168,7 +169,7 @@ async function describeSinglePlan(
   return lines;
 }
 
-/** Map a workflow resolution failure to the status problem message. */
+/** Map a workflow resolution or evidence-declaration failure to a status problem. */
 async function workflowProblemFor(
   root: string,
   plan: {
@@ -176,8 +177,9 @@ async function workflowProblemFor(
     method: string;
   },
 ): Promise<string | undefined> {
+  let workflow;
   try {
-    await resolveAdoptedWorkflow(root, plan.method);
+    workflow = await resolveAdoptedWorkflow(root, plan.method);
   } catch (error) {
     const detail = messageOf(error);
     if (detail.startsWith("workflow method not adopted:")) {
@@ -193,6 +195,13 @@ async function workflowProblemFor(
       return `Plan ${plan.id} declares an invalid workflow method: '${plan.method}'.`;
     }
     return `Plan ${plan.id} workflow error: ${detail}`;
+  }
+  const { invalid } = parseEvidenceRequirements(workflow.content);
+  if (invalid.length > 0) {
+    return (
+      `Plan ${plan.id} uses workflow '${plan.method}', which declares an ` +
+      `invalid evidence requirement: ${invalid.join(", ")}.`
+    );
   }
   return undefined;
 }

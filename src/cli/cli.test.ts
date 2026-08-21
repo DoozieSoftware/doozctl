@@ -120,6 +120,17 @@ describe("humanizeError", () => {
     expect(message).toContain("Workflow method document is malformed: bug-fix");
     expect(message).toContain("- id: <method-id>");
   });
+
+  it("rewrites an invalid evidence requirement with the valid categories", () => {
+    const message = humanizeError(
+      new Error("invalid evidence requirement: tsets (workflow 'bug-fix')"),
+    );
+    expect(message).toContain("invalid evidence requirement: tsets (workflow 'bug-fix').");
+    expect(message).toContain(
+      "acceptance-criteria, commit, git-state, release, tests, verification",
+    );
+    expect(message).toContain("## Required Evidence");
+  });
 });
 
 describe("runCli", () => {

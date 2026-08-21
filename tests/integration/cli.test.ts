@@ -409,6 +409,54 @@ describe("doozctl CLI (integration)", () => {
     );
   });
 
+  it("plan and status reject a workflow with an invalid evidence requirement", async () => {
+    const { repo, pkg } = await makeRepoAndPackage();
+    await mkdir(path.join(repo, ".dooz", "workflows", "adopted"), { recursive: true });
+    await writeFile(
+      path.join(repo, ".dooz", "workflows", "adopted", "standard.md"),
+      [
+        "# Standard",
+        "",
+        "## Metadata",
+        "",
+        "- id: standard",
+        "",
+        "## Required Evidence",
+        "",
+        "- [ ] tests",
+        "- [ ] tsets",
+      ].join("\n"),
+      "utf-8",
+    );
+    const streams = capture();
+    const app = new App(new Engine(), {
+      ...buildDeps(),
+      print: (message) => streams.stdout.write(message + "\n"),
+    });
+    const dispatcher = new Dispatcher()
+      .register("init", app.init.bind(app))
+      .register("status", app.status.bind(app))
+      .register("plan", app.plan.bind(app));
+
+    await runCli(["init", repo, pkg], dispatcher, streams);
+
+    // plan: repository-state problem → exit 1 with humanized guidance.
+    const planCode = await runCli(["plan", repo], dispatcher, streams);
+    expect(planCode).toBe(1);
+    expect(streams.err()).toContain("invalid evidence requirement: tsets (workflow 'standard')");
+    expect(streams.err()).toContain(
+      "acceptance-criteria, commit, git-state, release, tests, verification",
+    );
+
+    // status: the same problem surfaces in the control-plane view.
+    await writePlanFile(repo, "attendance-punch-sync", "standard", "EXECUTING");
+    const statusCode = await runCli(["status", repo], dispatcher, streams);
+    expect(statusCode).toBe(1);
+    expect(streams.out()).toContain(
+      "Plan attendance-punch-sync uses workflow 'standard', which declares an invalid evidence requirement: tsets.",
+    );
+  });
+
   it("status reports git cleanliness for an initialized git repository", async () => {
     const repo = await makeGitRepo();
     const pkg = await makeStandardsPackage();

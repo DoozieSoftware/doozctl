@@ -424,6 +424,45 @@ describe("App", () => {
     expect(report).toContain("Commit the verified change.");
   });
 
+  it("status reports an invalid evidence declaration as a problem", async () => {
+    const dir = await tmp();
+    const workflows = path.join(dir, ".dooz", "workflows", "adopted");
+    await mkdir(workflows, { recursive: true });
+    await writeFile(
+      path.join(workflows, "bug-fix.md"),
+      [
+        "# Bug-Fix",
+        "",
+        "## Metadata",
+        "",
+        "- id: bug-fix",
+        "",
+        "## Required Evidence",
+        "",
+        "- [ ] tests",
+        "- [ ] tsets",
+      ].join("\n"),
+      "utf-8",
+    );
+    const pkg = await tmp();
+    await writePackage(pkg);
+    const { deps, printed } = buildDeps();
+    const app = new App(new Engine(), deps);
+    await app.init([dir, pkg]);
+
+    await writeActivePlan(dir, {
+      id: "attendance-punch-sync",
+      method: "bug-fix",
+      status: "EXECUTING",
+      created: "2026-08-09",
+    });
+
+    await expect(app.status([dir])).resolves.toBe(1);
+    expect(printed.join("\n")).toContain(
+      "Plan attendance-punch-sync uses workflow 'bug-fix', which declares an invalid evidence requirement: tsets.",
+    );
+  });
+
   it("status reports multiple active plans without selecting one", async () => {
     const dir = await tmp();
     const pkg = await tmp();
@@ -656,6 +695,38 @@ describe("App plan", () => {
     const app = new App(new Engine(), buildDeps().deps);
 
     await expect(app.plan([dir])).rejects.toThrow(/workflow method asset is malformed: standard/);
+    expect(await listActive(dir)).toEqual([]);
+  });
+
+  it("rejects a workflow with an invalid evidence requirement without writing a plan", async () => {
+    const dir = await tmp();
+    await adoptWorkflow(
+      dir,
+      "standard",
+      "adopted",
+      [
+        "# Standard",
+        "",
+        "## Metadata",
+        "",
+        "- id: standard",
+        "",
+        "## Required Evidence",
+        "",
+        "- [ ] tests",
+        "- [ ] tsets",
+      ].join("\n"),
+    );
+    const app = new App(new Engine(), buildDeps().deps);
+
+    // A repository-state problem (exit 1), not user input (exit 2).
+    const error = await app.plan([dir]).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toMatchObject({ name: "UsageError" });
+    expect((error as Error).message).toContain("invalid evidence requirement: tsets");
     expect(await listActive(dir)).toEqual([]);
   });
 
