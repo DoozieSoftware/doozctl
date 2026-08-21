@@ -1,7 +1,7 @@
 # DoozCTL Workflow Specification
 
-**Version:** 1.0.0 (v2 Workflow contract)
-**Status:** Frozen — v2 Phase 2.1
+**Version:** 1.1.0 (v2 Workflow contract)
+**Status:** Frozen — v2 Phase 2.1 · amended v2 Phase 2.6 (canonical evidence checklist)
 **Part of:** [V2-SPEC.md](./V2-SPEC.md) · see [PLAN-SPEC.md](./PLAN-SPEC.md) for the Plan contract
 
 ---
@@ -49,7 +49,9 @@ Numbered stages the work passes through.
 
 ## Required Evidence
 
-The evidence that must exist for the Plan to be considered done.
+What must exist for the Plan to be considered done. Checklist items
+(`- [ ] <category>`) declare machine-checkable evidence; plain bullets remain
+human requirements.
 
 ## Completion Criteria
 
@@ -76,6 +78,59 @@ What the method produces (code, tests, docs, commits, plan sections updated).
    evidence is the floor, never the ceiling.
 4. A method may define **Human Approval Points**. Required approvals are
    mandatory; project customization may not remove them.
+5. Required evidence is declared with canonical checklist items (see
+   [Canonical Evidence Categories](#canonical-evidence-categories)). The
+   engine verifies only what it can check deterministically and reports
+   everything else as manual evidence. Evidence remains the floor, never the
+   ceiling.
+
+---
+
+# Canonical Evidence Categories
+
+A workflow declares machine-checkable required evidence with Markdown
+checklist items in its `## Required Evidence` section, where `<category>` is
+one of the closed vocabulary below:
+
+```markdown
+- [ ] acceptance-criteria
+- [ ] verification
+- [ ] tests
+- [ ] commit
+- [ ] git-state
+- [ ] release
+```
+
+| Category              | Deterministic check (read-only)                    | Grounded in                    |
+| --------------------- | -------------------------------------------------- | ------------------------------ |
+| `acceptance-criteria` | plan `## Acceptance Criteria` section is non-empty | PLAN-SPEC (Canonical Template) |
+| `verification`        | plan `## Verification` section is non-empty        | PLAN-SPEC (Evidence)           |
+| `tests`               | plan `## Test Evidence` section is non-empty       | PLAN-SPEC (Evidence)           |
+| `commit`              | plan `## Commit` section is non-empty              | PLAN-SPEC (Plans and Git)      |
+| `git-state`           | repository is inside a git repository              | Git facts (read-only)          |
+| `release`             | HEAD carries a git tag                             | Git facts (read-only)          |
+
+Rules:
+
+1. Matching is exact lowercase kebab-case after trimming the checkbox.
+2. The checkbox state in the workflow document is not meaningful; the item's
+   presence declares the requirement.
+3. Duplicate declarations collapse — requirements are a set.
+4. An empty `## Required Evidence` section declares no requirements.
+5. A checklist item naming an unknown category is an **invalid evidence
+   requirement**: verification fails clearly and lists the valid categories.
+   It is never guessed and never skipped.
+6. Plain bullets and paragraphs in `## Required Evidence` are human
+   requirements. They are reported as manual evidence — never machine-checked,
+   and they never gate a verification result.
+
+The engine checks the **presence of recorded evidence**, never its quality or
+truthfulness, and never executes commands to produce it. Engine support for
+these checks lands with `doozctl verify` (Phase 2.8); until then no engine
+behavior depends on this section. Extending the vocabulary is a deliberate,
+versioned contract change — one table row plus one deterministic check. There
+are no operators, no composition, no conditionals and no execution semantics:
+this is a vocabulary, not a language.
 
 ---
 
@@ -214,6 +269,8 @@ PLANNED → EXECUTING → VERIFIED → TESTED → COMMITTED → MERGED → COMPL
 
 ## Required Evidence
 
+- [ ] verification
+- [ ] tests
 - Verification result
 - Test result (when tests exist)
 
@@ -258,6 +315,9 @@ PLANNED → EXECUTING → VERIFIED → TESTED → COMMITTED → MERGED → COMPL
 
 ## Required Evidence
 
+- [ ] verification
+- [ ] tests
+- [ ] commit
 - Verification result
 - Test evidence (tests written or explicitly N/A with reason)
 - Commit reference
@@ -306,6 +366,9 @@ PLANNED → EXECUTING → VERIFIED → TESTED → COMMITTED → MERGED → COMPL
 
 ## Required Evidence
 
+- [ ] tests
+- [ ] verification
+- [ ] commit
 - Reproduction (when reproducible)
 - Root cause
 - Regression test
@@ -445,3 +508,12 @@ A workflow method is not:
 - a scripting language or DSL (no YAML steps, no runner)
 - a policy hierarchy with inheritance
 - a mandatory sequence for every plan
+
+---
+
+# Amendments
+
+- **1.1.0 — Phase 2.6:** `## Required Evidence` gained a machine-checkable
+  form: canonical evidence categories declared as Markdown checklist items.
+  Prose bullets remain valid and are never machine-checked. No other section
+  of the method contract changed.

@@ -22,6 +22,8 @@ PLANNED → EXECUTING → VERIFIED → TESTED → COMMITTED → MERGED → COMPL
 
 ## Required Evidence
 
+- [ ] verification
+- [ ] tests
 - Verification result
 - Test result (when tests exist)
 

@@ -22,6 +22,9 @@ PLANNED → EXECUTING → VERIFIED → TESTED → COMMITTED → MERGED → COMPL
 
 ## Required Evidence
 
+- [ ] tests
+- [ ] verification
+- [ ] commit
 - Reproduction (when reproducible)
 - Root cause
 - Regression test

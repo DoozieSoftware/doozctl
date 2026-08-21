@@ -22,6 +22,9 @@ PLANNED → EXECUTING → VERIFIED → TESTED → COMMITTED → MERGED → COMPL
 
 ## Required Evidence
 
+- [ ] verification
+- [ ] tests
+- [ ] commit
 - Verification result
 - Test evidence (tests written or explicitly N/A with reason)
 - Commit reference
