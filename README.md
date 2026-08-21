@@ -95,8 +95,9 @@ doozctl sync <repo> <package>                 # re-render managed artifacts, kee
 doozctl analyze [repo]                        # update repository analysis only
 doozctl summarize <repo> <package> <session>  # append an immutable session summary
 doozctl doctor <repo> <package>               # verify repository health
-doozctl status [repo]                         # show what DoozCTL understands
+doozctl status [repo]                         # repository + control-plane view
 doozctl plan [--method <method>] [--title <title>]  # create an engineering Plan under .dooz/plans/
+doozctl verify [repo]                         # check the active Plan's required evidence
 ```
 
 `plan` resolves `--method` against the workflows the repository has adopted
@@ -104,6 +105,12 @@ under `.dooz/workflows/adopted/` (from a Standards Package) or
 `.dooz/workflows/project/`; the default method is `standard`, and it too must
 be adopted. The sample Standards Package ships the five initial methods in
 `standards/workflows/`.
+
+`verify` reads the adopted workflow's `## Required Evidence` checklist
+(WORKFLOW-SPEC) and reports whether the active Plan records that evidence —
+plan sections, git facts, and workflow-declared files such as
+`changelog: CHANGELOG.md`. It checks presence, never quality, and never runs
+anything.
 
 Every command supports `--help` with usage and an example.
 
@@ -127,14 +134,16 @@ See [ARCHITECTURE.md](https://github.com/DoozieSoftware/doozctl/blob/main/ARCHIT
 
 ## Status
 
-All six workflows are implemented and tested (267 tests, ~94% coverage):
+All eight workflows are implemented and tested (483 tests, ~96% coverage):
 
 - ✅ init
 - ✅ sync
 - ✅ analyze
 - ✅ summarize
 - ✅ doctor
-- ✅ status
+- ✅ status (v2 control-plane view)
+- ✅ plan
+- ✅ verify
 
 See [ROADMAP.md](https://github.com/DoozieSoftware/doozctl/blob/main/ROADMAP.md) for what is planned next and
 [RELEASE_CHECKLIST.md](https://github.com/DoozieSoftware/doozctl/blob/main/RELEASE_CHECKLIST.md) for the v1.0 release gate.
