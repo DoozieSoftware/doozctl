@@ -347,19 +347,27 @@ Do not silently change the frozen engine. v1 fixes belong on `release/v1`.
 
 # Phase Order
 
-| Phase | Deliverable                            | Gate                                   |
-| ----- | -------------------------------------- | -------------------------------------- |
-| 2.1   | Freeze contracts (this doc)            | documents agree                        |
-| 2.2   | Plan domain model (phase 2.2 contract) | create/load/validate/update/transition |
-| 2.3   | `doozctl plan` CLI                     | plan + plan --method                   |
-| 2.4   | Workflow assets + adoption             | five methods                           |
-| 2.5   | Status 2.0                             | active plan/workflow                   |
-| 2.6   | `doozctl verify`                       | evidence validation                    |
-| 2.7   | AGENTS.md guidance                     | hot context tiny                       |
-| 2.8   | Dogfood on DoozieSoft repos            |                                        |
-| 2.9   | Cross-agent handoff                    | Claude ↔ Codex ↔ OpenCode              |
-| 2.10  | Red team v2                            | corruption, staleness, conflict        |
-| 2.11  | Release candidate                      | `v2.0.0-rc.1`                          |
+> **Closure note (2026-08-21):** v2 development closed at **2.0.0-rc.1** after
+> Phase 2.10. In this roadmap, 2.1–2.6 shipped as phases 2.1–2.6; the
+> verification work landed as 2.7–2.10 (validation, `verify`, test-fact
+> visibility, path-bound changelog/version). The rows below marked _deferred_
+> are consciously postponed — see `docs/release/V2-CLOSE-OUT.md`. Promotion
+> to final 2.0.0 is gated on manual testing
+> (`docs/v2/V2-MANUAL-TESTING.md`).
+
+| Phase | Deliverable                            | Gate                                         |
+| ----- | -------------------------------------- | -------------------------------------------- |
+| 2.1   | Freeze contracts (this doc)            | documents agree                              |
+| 2.2   | Plan domain model (phase 2.2 contract) | create/load/validate/update/transition       |
+| 2.3   | `doozctl plan` CLI                     | plan + plan --method                         |
+| 2.4   | Workflow assets + adoption             | five methods                                 |
+| 2.5   | Status 2.0                             | active plan/workflow                         |
+| 2.6   | Evidence contract + verify             | evidence validation                          |
+| 2.7   | AGENTS.md guidance                     | hot context tiny — _deferred_                |
+| 2.8   | Dogfood on DoozieSoft repos            | — _deferred → manual testing_                |
+| 2.9   | Cross-agent handoff                    | Claude ↔ Codex ↔ OpenCode — _deferred_       |
+| 2.10  | Red team v2                            | corruption, staleness, conflict — _deferred_ |
+| 2.11  | Release candidate                      | `v2.0.0-rc.1` — ✅ cut at close              |
 
 Each phase implements → verifies → tests → commits → stops for approval.
 
