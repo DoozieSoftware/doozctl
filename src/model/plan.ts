@@ -108,15 +108,15 @@ export function nextPlanStatus(status: PlanAnyStatus): PlanStatus | undefined {
 }
 
 /**
- * The text of the optional `## Next Action` section, trimmed, or undefined
- * when the section is absent or empty. A plan's next action is authored
- * content; reading it never claims the action has happened.
+ * The trimmed body of a `## <heading>` section, or "" when the section is
+ * absent or empty. Section bodies are authored content; reading one never
+ * claims its evidence has been produced.
  */
-export function extractNextAction(content: string): string | undefined {
+export function planSection(content: string, heading: string): string {
   const lines = content.replace(/\r\n?/g, "\n").split("\n");
-  const index = lines.findIndex((line) => /^##\s+Next Action\s*$/.test(line));
+  const index = lines.findIndex((line) => new RegExp(`^##\\s+${heading}\\s*$`).test(line));
   if (index === -1) {
-    return undefined;
+    return "";
   }
   const body: string[] = [];
   for (let i = index + 1; i < lines.length; i += 1) {
@@ -126,7 +126,16 @@ export function extractNextAction(content: string): string | undefined {
     }
     body.push(line);
   }
-  const text = body.join("\n").trim();
+  return body.join("\n").trim();
+}
+
+/**
+ * The text of the optional `## Next Action` section, trimmed, or undefined
+ * when the section is absent or empty. A plan's next action is authored
+ * content; reading it never claims the action has happened.
+ */
+export function extractNextAction(content: string): string | undefined {
+  const text = planSection(content, "Next Action");
   return text === "" ? undefined : text;
 }
 

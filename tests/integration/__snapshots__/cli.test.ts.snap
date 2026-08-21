@@ -21,6 +21,7 @@ Commands:
                        current context.
   sync [args...]       Re-render managed artifacts, preserving developer
                        content.
+  verify [args...]     Verify the active Plan's required evidence. Read-only.
   help [command]       display help for command
 "
 `;

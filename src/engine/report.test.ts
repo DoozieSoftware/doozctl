@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import type { Analysis, Manifest } from "../model/model.js";
 import { PlanStore } from "../store/plan-store.js";
-import { buildStatusReport } from "./report.js";
+import { buildStatusReport, buildVerifyReport } from "./report.js";
 
 const dirs: string[] = [];
 afterAll(async () => {
@@ -73,6 +73,8 @@ async function writePlan(
     status: string;
     created?: string;
     nextAction?: string;
+    /** Extra `## <heading>` sections with body text, in insertion order. */
+    sections?: Record<string, string>;
   },
 ): Promise<void> {
   const created = plan.created ?? "2026-08-09";
@@ -88,10 +90,29 @@ async function writePlan(
     `- status: ${plan.status}`,
     `- created: ${created}`,
   ];
+  for (const [heading, text] of Object.entries(plan.sections ?? {})) {
+    body.push("", `## ${heading}`, "", text);
+  }
   if (plan.nextAction !== undefined) {
     body.push("", "## Next Action", "", plan.nextAction);
   }
   await writeFile(path.join(active, `${created}-${plan.id}.md`), body.join("\n"), "utf-8");
+}
+
+/** A workflow document declaring the given required-evidence checklist. */
+function workflowWithEvidence(id: string, checklist: string[], manual: string[] = []): string {
+  return [
+    `# ${id}`,
+    "",
+    "## Metadata",
+    "",
+    `- id: ${id}`,
+    "",
+    "## Required Evidence",
+    "",
+    ...checklist.map((category) => `- [ ] ${category}`),
+    ...manual.map((text) => `- ${text}`),
+  ].join("\n");
 }
 
 const planStore = new PlanStore({ now: () => new Date(2026, 7, 9, 9, 30, 0) });
@@ -321,5 +342,216 @@ describe("buildStatusReport", () => {
 
     expect(problems).toEqual([]);
     expect(report).toContain("ID: feature");
+  });
+});
+
+describe("buildVerifyReport", () => {
+  /** Git stub: HEAD tagged (release evidence) per flag. */
+  const git = (tagged: boolean) => ({ headTagged: async () => tagged });
+
+  it("reports READY when the plan records every required evidence", async () => {
+    const dir = await tmp();
+    await adoptWorkflow(
+      dir,
+      "bug-fix",
+      "adopted",
+      workflowWithEvidence("bug-fix", ["tests", "verification", "commit"]),
+    );
+    await writePlan(dir, {
+      id: "punch-sync",
+      method: "bug-fix",
+      status: "TESTED",
+      sections: {
+        "Acceptance Criteria": "- Punch sync verified on device.",
+        Verification: "typecheck passed; lint passed",
+        "Test Evidence": "19 tests / 38 assertions passed",
+        Commit: "abc1234 on main",
+      },
+    });
+
+    const { report, problems } = await buildVerifyReport(dir, analysis(dir), planStore, git(false));
+
+    expect(problems).toEqual([]);
+    expect(report).toContain("DoozCTL Verify");
+    expect(report).toContain("ID: punch-sync");
+    expect(report).toContain("Method: bug-fix");
+    expect(report).toContain("Status: TESTED");
+    expect(report).toContain("Tests                 ✓");
+    expect(report).toContain("Verification          ✓");
+    expect(report).toContain("Commit                ✓");
+    expect(report).toContain("Result\n  READY");
+  });
+
+  it("reports NOT READY with the missing evidence list", async () => {
+    const dir = await tmp();
+    await adoptWorkflow(
+      dir,
+      "bug-fix",
+      "adopted",
+      workflowWithEvidence("bug-fix", ["tests", "verification", "commit"]),
+    );
+    await writePlan(dir, { id: "punch-sync", method: "bug-fix", status: "EXECUTING" });
+
+    const { report, problems } = await buildVerifyReport(dir, analysis(dir), planStore, git(false));
+
+    expect(problems).not.toEqual([]);
+    expect(report).toContain("Tests                 ✗");
+    expect(report).toContain("Verification          ✗");
+    expect(report).toContain("Commit                ✗");
+    expect(report).toContain("Result\n  NOT READY");
+    expect(report).toContain("Missing:\n  Tests\n  Verification\n  Commit");
+  });
+
+  it("checks acceptance criteria against the plan section", async () => {
+    const dir = await tmp();
+    await adoptWorkflow(
+      dir,
+      "feature",
+      "adopted",
+      workflowWithEvidence("feature", ["acceptance-criteria"]),
+    );
+    await writePlan(dir, {
+      id: "feature",
+      method: "feature",
+      status: "EXECUTING",
+      sections: { "Acceptance Criteria": "- Works." },
+    });
+
+    const { report, problems } = await buildVerifyReport(dir, analysis(dir), planStore, git(false));
+
+    expect(problems).toEqual([]);
+    expect(report).toContain("Acceptance criteria   ✓");
+  });
+
+  it("derives git-state from repository facts and release from a tag on HEAD", async () => {
+    const dir = await tmp();
+    await adoptWorkflow(
+      dir,
+      "release",
+      "adopted",
+      workflowWithEvidence("release", ["git-state", "release"]),
+    );
+    await writePlan(dir, { id: "release", method: "release", status: "TESTED" });
+
+    const tagged = await buildVerifyReport(
+      dir,
+      analysis(dir, { git: { isRepository: true, branch: "main", dirty: false } }),
+      planStore,
+      git(true),
+    );
+    expect(tagged.problems).toEqual([]);
+    expect(tagged.report).toContain("Git state             ✓");
+    expect(tagged.report).toContain("Release               ✓");
+
+    const untagged = await buildVerifyReport(dir, analysis(dir), planStore, git(false));
+    expect(untagged.problems).not.toEqual([]);
+    expect(untagged.report).toContain("Git state             ✗");
+    expect(untagged.report).toContain("Release               ✗");
+    expect(untagged.report).toContain("Missing:\n  Git repository\n  Release tag");
+  });
+
+  it("lists manual evidence without letting it gate the result", async () => {
+    const dir = await tmp();
+    await adoptWorkflow(
+      dir,
+      "bug-fix",
+      "adopted",
+      workflowWithEvidence("bug-fix", ["tests"], ["Root cause identified and recorded"]),
+    );
+    await writePlan(dir, {
+      id: "punch-sync",
+      method: "bug-fix",
+      status: "TESTED",
+      sections: { "Test Evidence": "regression test added" },
+    });
+
+    const { report, problems } = await buildVerifyReport(dir, analysis(dir), planStore, git(false));
+
+    expect(problems).toEqual([]);
+    expect(report).toContain("Manual evidence (not machine-checked):");
+    expect(report).toContain("- Root cause identified and recorded");
+    expect(report).toContain("Result\n  READY");
+  });
+
+  it("reports a workflow that declares no required evidence", async () => {
+    const dir = await tmp();
+    await adoptWorkflow(dir, "triage", "adopted", workflowContent("triage"));
+    await writePlan(dir, { id: "triage", method: "triage", status: "PLANNED" });
+
+    const { report, problems } = await buildVerifyReport(dir, analysis(dir), planStore, git(false));
+
+    expect(problems).toEqual([]);
+    expect(report).toContain("Workflow declares no required evidence.");
+    expect(report).toContain("Result\n  READY");
+  });
+
+  it("reports no active plan as NOT READY", async () => {
+    const dir = await tmp();
+    const { report, problems } = await buildVerifyReport(dir, analysis(dir), planStore, git(false));
+
+    expect(problems).not.toEqual([]);
+    expect(report).toContain("Plan\n  None");
+    expect(report).toContain("No active plan to verify.");
+    expect(report).toContain("Result\n  NOT READY");
+  });
+
+  it("reports multiple active plans without selecting one", async () => {
+    const dir = await tmp();
+    await writePlan(dir, { id: "plan-a", method: "bug-fix", status: "EXECUTING" });
+    await writePlan(dir, {
+      id: "plan-b",
+      method: "feature",
+      status: "PLANNED",
+      created: "2026-08-10",
+    });
+
+    const { report, problems } = await buildVerifyReport(dir, analysis(dir), planStore, git(false));
+
+    expect(problems).not.toEqual([]);
+    expect(report).toContain("Multiple active plans found:");
+    expect(report).toContain("plan-a — bug-fix (EXECUTING)");
+    expect(report).toContain("Resolve the ambiguity before continuing.");
+  });
+
+  it("reports a malformed active plan", async () => {
+    const dir = await tmp();
+    const active = path.join(dir, ".dooz", "plans", "active");
+    await mkdir(active, { recursive: true });
+    await writeFile(path.join(active, "2026-08-09-broken.md"), "# Broken\nno metadata\n", "utf-8");
+
+    const { report, problems } = await buildVerifyReport(dir, analysis(dir), planStore, git(false));
+
+    expect(problems).not.toEqual([]);
+    expect(report).toContain("Plan broken is invalid:");
+  });
+
+  it("reports a missing adopted workflow", async () => {
+    const dir = await tmp();
+    await writePlan(dir, { id: "punch-sync", method: "bug-fix", status: "EXECUTING" });
+
+    const { report, problems } = await buildVerifyReport(dir, analysis(dir), planStore, git(false));
+
+    expect(problems).not.toEqual([]);
+    expect(report).toContain(
+      "Plan punch-sync requires workflow 'bug-fix', but that workflow is not adopted.",
+    );
+  });
+
+  it("reports an invalid evidence requirement in the workflow", async () => {
+    const dir = await tmp();
+    await adoptWorkflow(
+      dir,
+      "bug-fix",
+      "adopted",
+      workflowWithEvidence("bug-fix", ["tests", "tsets"]),
+    );
+    await writePlan(dir, { id: "punch-sync", method: "bug-fix", status: "EXECUTING" });
+
+    const { report, problems } = await buildVerifyReport(dir, analysis(dir), planStore, git(false));
+
+    expect(problems).not.toEqual([]);
+    expect(report).toContain(
+      "Plan punch-sync uses workflow 'bug-fix', which declares an invalid evidence requirement: tsets.",
+    );
   });
 });

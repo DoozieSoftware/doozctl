@@ -117,6 +117,8 @@ async function writeActivePlan(
     status: string;
     created: string;
     nextAction?: string;
+    /** Extra `## <heading>` sections with body text, in insertion order. */
+    sections?: Record<string, string>;
   },
 ): Promise<void> {
   const active = path.join(dir, ".dooz", "plans", "active");
@@ -131,6 +133,9 @@ async function writeActivePlan(
     `- status: ${plan.status}`,
     `- created: ${plan.created}`,
   ];
+  for (const [heading, text] of Object.entries(plan.sections ?? {})) {
+    body.push("", `## ${heading}`, "", text);
+  }
   if (plan.nextAction !== undefined) {
     body.push("", "## Next Action", "", plan.nextAction);
   }
@@ -553,6 +558,101 @@ describe("App", () => {
     expect(report).toContain("Verify     ✓");
     expect(report).toContain("Test       ✗");
     expect(report).toContain("Next Action\n  Not specified.");
+  });
+
+  it("verify reports an uninitialized repository and guides the user", async () => {
+    const dir = await tmp();
+    const { deps, printed } = buildDeps();
+    const app = new App(new Engine(), deps);
+
+    await expect(app.verify([dir])).resolves.toBe(1);
+    expect(printed.join("\n")).toContain("DoozCTL is not initialized in this repository.");
+  });
+
+  it("verify reports READY when the plan records every required evidence", async () => {
+    const dir = await tmp();
+    const workflows = path.join(dir, ".dooz", "workflows", "adopted");
+    await mkdir(workflows, { recursive: true });
+    await writeFile(
+      path.join(workflows, "bug-fix.md"),
+      [
+        "# Bug-Fix",
+        "",
+        "## Metadata",
+        "",
+        "- id: bug-fix",
+        "",
+        "## Required Evidence",
+        "",
+        "- [ ] tests",
+        "- [ ] verification",
+        "- [ ] commit",
+      ].join("\n"),
+      "utf-8",
+    );
+    const pkg = await tmp();
+    await writePackage(pkg);
+    const { deps, printed } = buildDeps();
+    const app = new App(new Engine(), deps);
+    await app.init([dir, pkg]);
+
+    await writeActivePlan(dir, {
+      id: "punch-sync",
+      method: "bug-fix",
+      status: "TESTED",
+      created: "2026-08-09",
+      sections: {
+        Verification: "typecheck passed",
+        "Test Evidence": "19 tests passed",
+        Commit: "abc1234 on main",
+      },
+    });
+
+    await expect(app.verify([dir])).resolves.toBe(0);
+    const report = printed.join("\n");
+    expect(report).toContain("Tests                 ✓");
+    expect(report).toContain("Verification          ✓");
+    expect(report).toContain("Commit                ✓");
+    expect(report).toContain("Result\n  READY");
+  });
+
+  it("verify reports NOT READY with missing evidence and exits 1", async () => {
+    const dir = await tmp();
+    const workflows = path.join(dir, ".dooz", "workflows", "adopted");
+    await mkdir(workflows, { recursive: true });
+    await writeFile(
+      path.join(workflows, "bug-fix.md"),
+      [
+        "# Bug-Fix",
+        "",
+        "## Metadata",
+        "",
+        "- id: bug-fix",
+        "",
+        "## Required Evidence",
+        "",
+        "- [ ] tests",
+        "- [ ] commit",
+      ].join("\n"),
+      "utf-8",
+    );
+    const pkg = await tmp();
+    await writePackage(pkg);
+    const { deps, printed } = buildDeps();
+    const app = new App(new Engine(), deps);
+    await app.init([dir, pkg]);
+
+    await writeActivePlan(dir, {
+      id: "punch-sync",
+      method: "bug-fix",
+      status: "EXECUTING",
+      created: "2026-08-09",
+    });
+
+    await expect(app.verify([dir])).resolves.toBe(1);
+    const report = printed.join("\n");
+    expect(report).toContain("Result\n  NOT READY");
+    expect(report).toContain("Missing:\n  Tests\n  Commit");
   });
 });
 

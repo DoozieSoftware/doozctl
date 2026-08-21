@@ -102,4 +102,26 @@ describe("GitService", () => {
     expect(info?.dirty).toBe(false);
     cleanup();
   });
+
+  it("reports HEAD as untagged on a fresh repository", async () => {
+    const dir = makeRepo();
+    tempDirs.push(dir);
+    await expect(new GitService().headTagged(dir)).resolves.toBe(false);
+    cleanup();
+  });
+
+  it("reports HEAD as tagged after tagging it", async () => {
+    const dir = makeRepo();
+    tempDirs.push(dir);
+    execFileSync("git", ["tag", "v1.0.0"], { cwd: dir });
+    await expect(new GitService().headTagged(dir)).resolves.toBe(true);
+    cleanup();
+  });
+
+  it("reports no tag outside a repository", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "doozctl-git-norepo-"));
+    tempDirs.push(dir);
+    await expect(new GitService().headTagged(dir)).resolves.toBe(false);
+    cleanup();
+  });
 });

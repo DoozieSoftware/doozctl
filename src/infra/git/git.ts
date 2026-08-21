@@ -41,6 +41,20 @@ export class GitService {
     return this.git(dir, ["rev-parse", "--short", "HEAD"]);
   }
 
+  /**
+   * Whether HEAD carries a git tag (lightweight or annotated). Read-only;
+   * false outside a repository. This is the generic check behind the
+   * `release` evidence category (WORKFLOW-SPEC v1.1.0).
+   */
+  async headTagged(dir: string): Promise<boolean> {
+    const root = await this.git(dir, ["rev-parse", "--show-toplevel"]);
+    if (root === null) {
+      return false;
+    }
+    const tags = await this.git(root, ["tag", "--points-at", "HEAD"]);
+    return tags !== null && tags.length > 0;
+  }
+
   /** Run a read-only git command, returning trimmed stdout or null on error. */
   private async git(cwd: string, args: string[]): Promise<string | null> {
     try {

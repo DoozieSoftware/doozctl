@@ -109,6 +109,8 @@ async function writePlanFile(
   status: string,
   nextAction?: string,
   created = "2026-08-09",
+  /** Extra `## <heading>` sections with body text, in insertion order. */
+  sections: Record<string, string> = {},
 ): Promise<void> {
   const active = path.join(repo, ".dooz", "plans", "active");
   await mkdir(active, { recursive: true });
@@ -122,6 +124,9 @@ async function writePlanFile(
     `- status: ${status}`,
     `- created: ${created}`,
   ];
+  for (const [heading, text] of Object.entries(sections)) {
+    body.push("", `## ${heading}`, "", text);
+  }
   if (nextAction !== undefined) {
     body.push("", "## Next Action", "", nextAction);
   }
@@ -168,7 +173,8 @@ function buildDispatcher(print: (message: string) => void = () => {}): Dispatche
     .register("doctor", app.doctor.bind(app))
     .register("summarize", app.summarize.bind(app))
     .register("status", app.status.bind(app))
-    .register("plan", app.plan.bind(app));
+    .register("plan", app.plan.bind(app))
+    .register("verify", app.verify.bind(app));
 }
 
 /** Captures stdout/stderr writes for assertions. */
@@ -196,7 +202,7 @@ function capture(): { stdout: Writable; stderr: Writable; out: () => string; err
 }
 
 describe("doozctl CLI (integration)", () => {
-  it("exposes the seven core commands", () => {
+  it("exposes the eight core commands", () => {
     expect(buildDispatcher().commands()).toEqual([
       "analyze",
       "doctor",
@@ -205,6 +211,7 @@ describe("doozctl CLI (integration)", () => {
       "status",
       "summarize",
       "sync",
+      "verify",
     ]);
   });
 
@@ -510,6 +517,209 @@ describe("doozctl CLI (integration)", () => {
     const afterSecond = await snapshotRepo(repo);
     expect(afterSecond).toBe(before);
     expect(afterSecond).toBe(afterFirst);
+  });
+
+  it("verify reports READY when the plan records the required evidence", async () => {
+    const { repo, pkg } = await makeRepoAndPackage();
+    await adoptWorkflow(repo, "bug-fix");
+    // Upgrade the adopted workflow with a machine-checkable evidence checklist.
+    await writeFile(
+      path.join(repo, ".dooz", "workflows", "adopted", "bug-fix.md"),
+      [
+        "# Bug-Fix",
+        "",
+        "## Metadata",
+        "",
+        "- id: bug-fix",
+        "",
+        "## Required Evidence",
+        "",
+        "- [ ] tests",
+        "- [ ] verification",
+        "- [ ] commit",
+        "- Root cause identified and recorded",
+      ].join("\n"),
+      "utf-8",
+    );
+    const streams = capture();
+    const app = new App(new Engine(), {
+      ...buildDeps(),
+      print: (message) => streams.stdout.write(message + "\n"),
+    });
+    const dispatcher = new Dispatcher()
+      .register("init", app.init.bind(app))
+      .register("verify", app.verify.bind(app));
+
+    await runCli(["init", repo, pkg], dispatcher, streams);
+    await writePlanFile(repo, "punch-sync", "bug-fix", "TESTED", undefined, "2026-08-09", {
+      Verification: "typecheck passed; lint passed",
+      "Test Evidence": "19 tests / 38 assertions passed",
+      Commit: "abc1234 on main",
+    });
+
+    const code = await runCli(["verify", repo], dispatcher, streams);
+
+    expect(code).toBe(0);
+    const out = streams.out();
+    expect(out).toContain("DoozCTL Verify");
+    expect(out).toContain("ID: punch-sync");
+    expect(out).toContain("Tests                 ✓");
+    expect(out).toContain("Verification          ✓");
+    expect(out).toContain("Commit                ✓");
+    expect(out).toContain("Manual evidence (not machine-checked):");
+    expect(out).toContain("- Root cause identified and recorded");
+    expect(out).toContain("Result\n  READY");
+  });
+
+  it("verify reports NOT READY with the missing evidence and exits 1", async () => {
+    const { repo, pkg } = await makeRepoAndPackage();
+    await adoptWorkflow(repo, "bug-fix");
+    await writeFile(
+      path.join(repo, ".dooz", "workflows", "adopted", "bug-fix.md"),
+      [
+        "# Bug-Fix",
+        "",
+        "## Metadata",
+        "",
+        "- id: bug-fix",
+        "",
+        "## Required Evidence",
+        "",
+        "- [ ] acceptance-criteria",
+        "- [ ] tests",
+        "- [ ] verification",
+        "- [ ] commit",
+        "- [ ] release",
+      ].join("\n"),
+      "utf-8",
+    );
+    const streams = capture();
+    const app = new App(new Engine(), {
+      ...buildDeps(),
+      print: (message) => streams.stdout.write(message + "\n"),
+    });
+    const dispatcher = new Dispatcher()
+      .register("init", app.init.bind(app))
+      .register("verify", app.verify.bind(app));
+
+    await runCli(["init", repo, pkg], dispatcher, streams);
+    await writePlanFile(repo, "punch-sync", "bug-fix", "EXECUTING");
+
+    const code = await runCli(["verify", repo], dispatcher, streams);
+
+    expect(code).toBe(1);
+    const out = streams.out();
+    expect(out).toContain("Acceptance criteria   ✗");
+    expect(out).toContain("Release               ✗");
+    expect(out).toContain("Result\n  NOT READY");
+    expect(out).toContain(
+      "Missing:\n  Acceptance criteria\n  Tests\n  Verification\n  Commit\n  Release tag",
+    );
+  });
+
+  it("verify derives release evidence from a tag on HEAD in a git repository", async () => {
+    const repo = await makeGitRepo();
+    const pkg = await makeStandardsPackage();
+    await adoptWorkflow(repo, "release");
+    await writeFile(
+      path.join(repo, ".dooz", "workflows", "adopted", "release.md"),
+      [
+        "# Release",
+        "",
+        "## Metadata",
+        "",
+        "- id: release",
+        "",
+        "## Required Evidence",
+        "",
+        "- [ ] git-state",
+        "- [ ] release",
+      ].join("\n"),
+      "utf-8",
+    );
+    await writePlanFile(repo, "august-release", "release", "TESTED");
+    const streams = capture();
+    const app = new App(new Engine(), {
+      ...buildDeps(),
+      print: (message) => streams.stdout.write(message + "\n"),
+    });
+    const dispatcher = new Dispatcher()
+      .register("init", app.init.bind(app))
+      .register("verify", app.verify.bind(app));
+
+    await runCli(["init", repo, pkg], dispatcher, streams);
+    execFileSync("git", ["add", "."], { cwd: repo });
+    execFileSync("git", ["commit", "-m", "init output"], { cwd: repo, stdio: "ignore" });
+
+    const beforeTag = await runCli(["verify", repo], dispatcher, streams);
+    expect(beforeTag).toBe(1);
+    expect(streams.out()).toContain("Missing:\n  Release tag");
+
+    execFileSync("git", ["tag", "v1.0.0"], { cwd: repo });
+    const afterTag = await runCli(["verify", repo], dispatcher, streams);
+    expect(afterTag).toBe(0);
+    expect(streams.out()).toContain("Git state             ✓");
+    expect(streams.out()).toContain("Release               ✓");
+    expect(streams.out()).toContain("Result\n  READY");
+  });
+
+  it("verify never modifies the repository, even when run twice", async () => {
+    const repo = await makeGitRepo();
+    const pkg = await makeStandardsPackage();
+    await adoptWorkflow(repo, "bug-fix");
+    await writeFile(
+      path.join(repo, ".dooz", "workflows", "adopted", "bug-fix.md"),
+      [
+        "# Bug-Fix",
+        "",
+        "## Metadata",
+        "",
+        "- id: bug-fix",
+        "",
+        "## Required Evidence",
+        "",
+        "- [ ] commit",
+      ].join("\n"),
+      "utf-8",
+    );
+    await writePlanFile(repo, "punch-sync", "bug-fix", "EXECUTING");
+    const streams = capture();
+    const app = new App(new Engine(), {
+      ...buildDeps(),
+      print: (message) => streams.stdout.write(message + "\n"),
+    });
+    const dispatcher = new Dispatcher()
+      .register("init", app.init.bind(app))
+      .register("verify", app.verify.bind(app));
+
+    await runCli(["init", repo, pkg], dispatcher, streams);
+    execFileSync("git", ["add", "."], { cwd: repo });
+    execFileSync("git", ["commit", "-m", "init output"], { cwd: repo, stdio: "ignore" });
+    const before = await snapshotRepo(repo);
+
+    expect(await runCli(["verify", repo], dispatcher, streams)).toBe(1);
+    const afterFirst = await snapshotRepo(repo);
+    expect(afterFirst).toBe(before);
+
+    expect(await runCli(["verify", repo], dispatcher, streams)).toBe(1);
+    const afterSecond = await snapshotRepo(repo);
+    expect(afterSecond).toBe(before);
+    expect(afterSecond).toBe(afterFirst);
+  });
+
+  it("verify on an uninitialized repository exits 1 with guidance", async () => {
+    const { repo } = await makeRepoAndPackage();
+    const streams = capture();
+    const app = new App(new Engine(), {
+      ...buildDeps(),
+      print: (message) => streams.stdout.write(message + "\n"),
+    });
+    const dispatcher = new Dispatcher().register("verify", app.verify.bind(app));
+
+    const code = await runCli(["verify", repo], dispatcher, streams);
+
+    expect(code).toBe(1);
+    expect(streams.out()).toContain("DoozCTL is not initialized in this repository.");
   });
 
   it("renders a deterministic help snapshot", async () => {

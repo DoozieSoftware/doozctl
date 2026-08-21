@@ -10,6 +10,7 @@ import {
   parsePlan,
   planFilename,
   planIdFromFilename,
+  planSection,
   renderPlan,
   setPlanStatus,
   transitionPlan,
@@ -449,5 +450,48 @@ describe("extractNextAction", () => {
   it("stops at the next section heading", () => {
     const content = planWith("Do the thing.", "## Done\n\n- check");
     expect(extractNextAction(content)).toBe("Do the thing.");
+  });
+});
+
+describe("planSection", () => {
+  it("returns the trimmed body of a section", () => {
+    const content = [
+      "# My Plan",
+      "",
+      "## Verification",
+      "",
+      "typecheck passed",
+      "lint passed",
+      "",
+    ].join("\n");
+    expect(planSection(content, "Verification")).toBe("typecheck passed\nlint passed");
+  });
+
+  it("returns an empty string for a missing or empty section", () => {
+    const content = "# My Plan\n\n## Objective\n\nsomething\n";
+    expect(planSection(content, "Commit")).toBe("");
+    expect(planSection("# My Plan\n\n## Commit\n", "Commit")).toBe("");
+  });
+
+  it("stops at the next H2 heading and includes sub-headings", () => {
+    const content = [
+      "# My Plan",
+      "",
+      "## Scope",
+      "",
+      "### In Scope",
+      "",
+      "- the punch sync",
+      "",
+      "## Constraints",
+      "",
+      "- none",
+    ].join("\n");
+    expect(planSection(content, "Scope")).toBe("### In Scope\n\n- the punch sync");
+    expect(planSection(content, "Constraints")).toBe("- none");
+  });
+
+  it("normalizes CRLF line endings", () => {
+    expect(planSection("# P\r\n\r\n## Commit\r\n\r\nabc1234\r\n", "Commit")).toBe("abc1234");
   });
 });

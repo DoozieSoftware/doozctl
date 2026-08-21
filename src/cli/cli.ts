@@ -72,6 +72,12 @@ const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     usage: "doozctl status [repo]",
     example: "doozctl status .",
   },
+  verify: {
+    description: "Verify the active Plan's required evidence. Read-only.",
+    argumentDescription: "the repository path",
+    usage: "doozctl verify [repo]",
+    example: "doozctl verify .",
+  },
 };
 
 /**

@@ -15,7 +15,7 @@ import {
   summarizePipeline,
   syncPipeline,
 } from "../engine/pipelines.js";
-import { buildStatusReport } from "../engine/report.js";
+import { buildStatusReport, buildVerifyReport } from "../engine/report.js";
 import { formatSessionId, toLocalIso } from "../engine/session.js";
 import { isValidPlanId, planFilename, type Plan } from "../model/plan.js";
 import type { Manifest, SessionInput } from "../model/model.js";
@@ -219,11 +219,35 @@ export class App {
     const root = args[0] ?? ".";
     const manifest = await this.loadManifestOrNull(root);
     if (manifest === null) {
-      this.deps.print(STATUS_UNINITIALIZED);
+      this.deps.print(UNINITIALIZED_REPOSITORY);
       return ExitCode.Error;
     }
     const analysis = await this.deps.analyzer.analyze(root);
     const { report, problems } = await buildStatusReport(root, analysis, manifest, this.planStore);
+    this.deps.print(report);
+    return problems.length > 0 ? ExitCode.Error : ExitCode.OK;
+  }
+
+  /**
+   * verify: determine whether the active Plan has the required evidence per
+   * its adopted workflow (WORKFLOW-SPEC v1.1.0). Read-only: it checks the
+   * presence of recorded evidence and git facts — it never runs commands,
+   * never judges quality, and never writes.
+   */
+  async verify(args: string[]): Promise<number> {
+    const root = args[0] ?? ".";
+    const manifest = await this.loadManifestOrNull(root);
+    if (manifest === null) {
+      this.deps.print(UNINITIALIZED_REPOSITORY);
+      return ExitCode.Error;
+    }
+    const analysis = await this.deps.analyzer.analyze(root);
+    const { report, problems } = await buildVerifyReport(
+      root,
+      analysis,
+      this.planStore,
+      this.deps.git,
+    );
     this.deps.print(report);
     return problems.length > 0 ? ExitCode.Error : ExitCode.OK;
   }
@@ -389,8 +413,8 @@ const DOCTOR_USAGE = [
   "Example: doozctl doctor . ./standards",
 ].join("\n");
 
-/** The status view for a repository the engine has not initialized. */
-const STATUS_UNINITIALIZED = [
+/** The view shown when the engine has not initialized the repository. */
+const UNINITIALIZED_REPOSITORY = [
   "DoozCTL is not initialized in this repository.",
   "Run:",
   "  doozctl init <repository> <standards-package>",

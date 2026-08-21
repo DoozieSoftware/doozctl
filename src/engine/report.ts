@@ -5,13 +5,15 @@ import {
   nextPlanStatus,
   parsePlan,
   planIdFromFilename,
+  planSection,
+  type Plan,
   type PlanAnyStatus,
   type PlanStatus,
 } from "../model/plan.js";
 import type { PlanStore } from "../store/plan-store.js";
 import { Storage } from "../store/storage.js";
 import { resolveAdoptedWorkflow } from "../workflows/adoption.js";
-import { parseEvidenceRequirements } from "../workflows/evidence.js";
+import { parseEvidenceRequirements, type EvidenceCategory } from "../workflows/evidence.js";
 import type { ExecutionContext } from "./engine.js";
 import { validateManagedBlocks } from "./merge.js";
 
@@ -35,8 +37,8 @@ function describeGit(analysis: Analysis | null): string {
   return `Git: ${branch} (${state})`;
 }
 
-/** A status report: the deterministic text plus the problems that gate the exit code. */
-export interface StatusReport {
+/** A command report: the deterministic text plus the problems that gate the exit code. */
+export interface CommandReport {
   report: string;
   problems: string[];
 }
@@ -71,7 +73,7 @@ export async function buildStatusReport(
   analysis: Analysis,
   manifest: Manifest,
   planStore: PlanStore,
-): Promise<StatusReport> {
+): Promise<CommandReport> {
   const problems: string[] = [];
   const lines: string[] = ["DoozCTL Status", ""];
 
@@ -169,41 +171,188 @@ async function describeSinglePlan(
   return lines;
 }
 
-/** Map a workflow resolution or evidence-declaration failure to a status problem. */
+/** Map a workflow resolution failure to the plan-centric problem message. */
+function workflowProblemFromError(plan: { id: string; method: string }, error: unknown): string {
+  const detail = messageOf(error);
+  if (detail.startsWith("workflow method not adopted:")) {
+    return `Plan ${plan.id} requires workflow '${plan.method}', but that workflow is not adopted.`;
+  }
+  if (detail.startsWith("workflow method asset is malformed:")) {
+    return `Plan ${plan.id} requires workflow '${plan.method}', but its document is malformed.`;
+  }
+  if (detail.startsWith("duplicate workflow method:")) {
+    return `Plan ${plan.id} requires workflow '${plan.method}', but it is adopted in both adopted/ and project/.`;
+  }
+  if (detail.startsWith("invalid workflow method id:")) {
+    return `Plan ${plan.id} declares an invalid workflow method: '${plan.method}'.`;
+  }
+  return `Plan ${plan.id} workflow error: ${detail}`;
+}
+
+/** The problem for a workflow whose evidence declarations are invalid. */
+function invalidEvidenceProblem(plan: { id: string; method: string }, invalid: string[]): string {
+  return (
+    `Plan ${plan.id} uses workflow '${plan.method}', which declares an ` +
+    `invalid evidence requirement: ${invalid.join(", ")}.`
+  );
+}
+
+/** Resolve the active plan's workflow, returning a problem message instead of a workflow. */
 async function workflowProblemFor(
   root: string,
-  plan: {
-    id: string;
-    method: string;
-  },
+  plan: { id: string; method: string },
 ): Promise<string | undefined> {
   let workflow;
   try {
     workflow = await resolveAdoptedWorkflow(root, plan.method);
   } catch (error) {
-    const detail = messageOf(error);
-    if (detail.startsWith("workflow method not adopted:")) {
-      return `Plan ${plan.id} requires workflow '${plan.method}', but that workflow is not adopted.`;
-    }
-    if (detail.startsWith("workflow method asset is malformed:")) {
-      return `Plan ${plan.id} requires workflow '${plan.method}', but its document is malformed.`;
-    }
-    if (detail.startsWith("duplicate workflow method:")) {
-      return `Plan ${plan.id} requires workflow '${plan.method}', but it is adopted in both adopted/ and project/.`;
-    }
-    if (detail.startsWith("invalid workflow method id:")) {
-      return `Plan ${plan.id} declares an invalid workflow method: '${plan.method}'.`;
-    }
-    return `Plan ${plan.id} workflow error: ${detail}`;
+    return workflowProblemFromError(plan, error);
   }
   const { invalid } = parseEvidenceRequirements(workflow.content);
-  if (invalid.length > 0) {
-    return (
-      `Plan ${plan.id} uses workflow '${plan.method}', which declares an ` +
-      `invalid evidence requirement: ${invalid.join(", ")}.`
-    );
+  return invalid.length > 0 ? invalidEvidenceProblem(plan, invalid) : undefined;
+}
+
+/** Minimal git capability verification needs: whether HEAD carries a tag. */
+export interface VerifyGit {
+  headTagged(dir: string): Promise<boolean>;
+}
+
+/** Human-readable label and missing-detail per canonical evidence category. */
+const EVIDENCE_LABELS: Record<EvidenceCategory, { label: string; missing: string }> = {
+  "acceptance-criteria": { label: "Acceptance criteria", missing: "Acceptance criteria" },
+  tests: { label: "Tests", missing: "Tests" },
+  verification: { label: "Verification", missing: "Verification" },
+  commit: { label: "Commit", missing: "Commit" },
+  "git-state": { label: "Git state", missing: "Git repository" },
+  release: { label: "Release", missing: "Release tag" },
+};
+
+/**
+ * Whether the plan records evidence for a plan-section-backed category, or
+ * undefined when the category is checked against git facts instead.
+ */
+function planEvidencePresent(category: EvidenceCategory, plan: Plan): boolean | undefined {
+  switch (category) {
+    case "acceptance-criteria":
+      return planSection(plan.content, "Acceptance Criteria") !== "";
+    case "verification":
+      return planSection(plan.content, "Verification") !== "";
+    case "tests":
+      return planSection(plan.content, "Test Evidence") !== "";
+    case "commit":
+      return planSection(plan.content, "Commit") !== "";
+    default:
+      return undefined;
   }
-  return undefined;
+}
+
+/**
+ * Verify: determine whether the active Plan has the required evidence per its
+ * adopted workflow (WORKFLOW-SPEC v1.1.0). Read-only — it checks the presence
+ * of recorded evidence and git facts; it never runs commands, never judges
+ * quality, and never writes.
+ */
+export async function buildVerifyReport(
+  root: string,
+  analysis: Analysis,
+  planStore: PlanStore,
+  git: VerifyGit,
+): Promise<CommandReport> {
+  const problems: string[] = [];
+  const lines: string[] = ["DoozCTL Verify", ""];
+
+  let planFiles: string[];
+  try {
+    planFiles = await planStore.list(root, "active");
+  } catch (error) {
+    problems.push(`cannot read active plans: ${messageOf(error)}`);
+    lines.push("Plan", "  Unavailable.");
+    return { report: lines.join("\n"), problems };
+  }
+
+  if (planFiles.length === 0) {
+    problems.push("no active plan");
+    lines.push("Plan", "  None", "", "Result", "  NOT READY", "", "No active plan to verify.");
+    return { report: lines.join("\n"), problems };
+  }
+
+  if (planFiles.length > 1) {
+    problems.push(`multiple active plans found: ${planFiles.join(", ")}`);
+    lines.push("Plan", "  Multiple active plans found:");
+    for (const file of planFiles) {
+      lines.push(`    ${await describePlanFile(root, file)}`);
+    }
+    lines.push("", "  Resolve the ambiguity before continuing.");
+    return { report: lines.join("\n"), problems };
+  }
+
+  const file = planFiles[0] as string;
+  const id = planIdFromFilename(file) ?? file;
+  let plan;
+  try {
+    plan = parsePlan(await readPlanFile(root, file));
+  } catch (error) {
+    const problem = `Plan ${id} is invalid: ${messageOf(error)}`;
+    problems.push(problem);
+    lines.push("Plan", `  ${problem}`);
+    return { report: lines.join("\n"), problems };
+  }
+
+  lines.push("Plan");
+  lines.push(`  ID: ${plan.id}`, `  Method: ${plan.method}`, `  Status: ${plan.status}`);
+
+  let workflow;
+  try {
+    workflow = await resolveAdoptedWorkflow(root, plan.method);
+  } catch (error) {
+    const problem = workflowProblemFromError(plan, error);
+    problems.push(problem);
+    lines.push("", `  ${problem}`);
+    return { report: lines.join("\n"), problems };
+  }
+  const { requirements, manual, invalid } = parseEvidenceRequirements(workflow.content);
+  if (invalid.length > 0) {
+    const problem = invalidEvidenceProblem(plan, invalid);
+    problems.push(problem);
+    lines.push("", `  ${problem}`);
+    return { report: lines.join("\n"), problems };
+  }
+
+  const missing: string[] = [];
+  lines.push("", "Evidence", "");
+  if (requirements.length === 0 && manual.length === 0) {
+    lines.push("  Workflow declares no required evidence.");
+  }
+  for (const category of requirements) {
+    const fromPlan = planEvidencePresent(category, plan);
+    const present =
+      fromPlan !== undefined
+        ? fromPlan
+        : category === "git-state"
+          ? analysis.git.isRepository
+          : await git.headTagged(root);
+    lines.push(`  ${EVIDENCE_LABELS[category].label.padEnd(22)}${present ? "✓" : "✗"}`);
+    if (!present) {
+      missing.push(EVIDENCE_LABELS[category].missing);
+    }
+  }
+  if (manual.length > 0) {
+    lines.push("", "Manual evidence (not machine-checked):");
+    for (const item of manual) {
+      lines.push(`  - ${item}`);
+    }
+  }
+
+  if (missing.length === 0) {
+    lines.push("", "Result", "  READY");
+  } else {
+    problems.push(`evidence incomplete: ${missing.join(", ")}`);
+    lines.push("", "Result", "  NOT READY", "", "Missing:");
+    for (const item of missing) {
+      lines.push(`  ${item}`);
+    }
+  }
+  return { report: lines.join("\n"), problems };
 }
 
 /** Read an active plan file through the sandboxed Storage. */
