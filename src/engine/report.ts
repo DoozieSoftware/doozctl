@@ -64,6 +64,23 @@ function stageReached(status: PlanAnyStatus, stage: PlanStatus): boolean {
 }
 
 /**
+ * The repository's detected test facts ("vitest · 12 test files"), or null
+ * when none are detected. Purely descriptive: the engine never judges whether
+ * the tests are sufficient — it juxtaposes facts with recorded evidence.
+ */
+function describeTestFacts(analysis: Analysis): string | null {
+  const parts: string[] = [];
+  if (analysis.testFramework !== null) {
+    parts.push(analysis.testFramework);
+  }
+  if (analysis.statistics.testFiles > 0) {
+    const n = analysis.statistics.testFiles;
+    parts.push(`${n} test ${n === 1 ? "file" : "files"}`);
+  }
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+/**
  * Status 2.0: a concise, read-only view of the repository and its v2 control
  * plane — repository facts, initialization, the active plan, its workflow,
  * lifecycle progress and the next action. Never writes.
@@ -87,6 +104,10 @@ export async function buildStatusReport(
   );
   if (analysis.languages.length > 0) {
     lines.push(`  Languages: ${analysis.languages.join(", ")}`);
+  }
+  const testFacts = describeTestFacts(analysis);
+  if (testFacts !== null) {
+    lines.push(`  Tests: ${testFacts}`);
   }
 
   lines.push("", "Control Plane");
@@ -331,7 +352,14 @@ export async function buildVerifyReport(
         : category === "git-state"
           ? analysis.git.isRepository
           : await git.headTagged(root);
-    lines.push(`  ${EVIDENCE_LABELS[category].label.padEnd(22)}${present ? "✓" : "✗"}`);
+    let row = `  ${EVIDENCE_LABELS[category].label.padEnd(22)}${present ? "✓" : "✗"}`;
+    if (category === "tests") {
+      const facts = describeTestFacts(analysis);
+      if (facts !== null) {
+        row += `  ${facts}`;
+      }
+    }
+    lines.push(row);
     if (!present) {
       missing.push(EVIDENCE_LABELS[category].missing);
     }

@@ -176,6 +176,28 @@ describe("buildStatusReport", () => {
     expect(report).toContain("Git: dirty");
   });
 
+  it("reports detected test facts in the repository section", async () => {
+    const dir = await tmp();
+    const { report } = await buildStatusReport(
+      dir,
+      analysis(dir, {
+        testFramework: "vitest",
+        statistics: { totalFiles: 20, sourceFiles: 8, testFiles: 12 },
+      }),
+      manifest,
+      planStore,
+    );
+
+    expect(report).toContain("Tests: vitest · 12 test files");
+  });
+
+  it("omits the test facts line when no test framework or files are detected", async () => {
+    const dir = await tmp();
+    const { report } = await buildStatusReport(dir, analysis(dir), manifest, planStore);
+
+    expect(report).not.toContain("Tests:");
+  });
+
   it("derives only reached stages from the lifecycle and never over-claims", async () => {
     const dir = await tmp();
     await adoptWorkflow(dir, "feature");
@@ -421,6 +443,47 @@ describe("buildVerifyReport", () => {
 
     expect(problems).toEqual([]);
     expect(report).toContain("Acceptance criteria   ✓");
+  });
+
+  it("annotates the tests row with the repository's test facts", async () => {
+    const dir = await tmp();
+    await adoptWorkflow(dir, "bug-fix", "adopted", workflowWithEvidence("bug-fix", ["tests"]));
+    await writePlan(dir, {
+      id: "punch-sync",
+      method: "bug-fix",
+      status: "TESTED",
+      sections: { "Test Evidence": "19 tests passed" },
+    });
+    const facts = {
+      testFramework: "vitest" as const,
+      statistics: { totalFiles: 20, sourceFiles: 8, testFiles: 12 },
+    };
+
+    const recorded = await buildVerifyReport(dir, analysis(dir, facts), planStore, git(false));
+    expect(recorded.report).toContain("Tests                 ✓  vitest · 12 test files");
+
+    // The same facts annotate a missing-evidence row — the juxtaposition is
+    // exactly the signal an engineer needs.
+    const empty = await tmp();
+    await adoptWorkflow(empty, "bug-fix", "adopted", workflowWithEvidence("bug-fix", ["tests"]));
+    await writePlan(empty, { id: "punch-sync", method: "bug-fix", status: "EXECUTING" });
+    const missing = await buildVerifyReport(empty, analysis(empty, facts), planStore, git(false));
+    expect(missing.report).toContain("Tests                 ✗  vitest · 12 test files");
+  });
+
+  it("leaves the tests row unannotated when no test facts are detected", async () => {
+    const dir = await tmp();
+    await adoptWorkflow(dir, "bug-fix", "adopted", workflowWithEvidence("bug-fix", ["tests"]));
+    await writePlan(dir, {
+      id: "punch-sync",
+      method: "bug-fix",
+      status: "TESTED",
+      sections: { "Test Evidence": "manual verification only" },
+    });
+
+    const { report } = await buildVerifyReport(dir, analysis(dir), planStore, git(false));
+
+    expect(report).toContain("Tests                 ✓\n");
   });
 
   it("derives git-state from repository facts and release from a tag on HEAD", async () => {
