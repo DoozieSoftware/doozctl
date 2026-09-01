@@ -33,6 +33,10 @@ Blocks are replaced by `doozctl sync`; everything outside them is preserved.
 these names; a repository adopts the ones it needs by copying them into
 `.dooz/workflows/adopted/` (see `docs/v2/WORKFLOW-SPEC.md`).
 
+## Doozie practice (private)
+
+`doozie-practice.md` distills the relevant parts of the global `GEMINI.md` agent rules for Doozie — intent handling, investigate-before-editing, hard gates, verification-as-part-of-work, safety, and Definition of Done — filtered to align with DoozCTL (minimal, deterministic, brownfield-first, repository over conversation). It is reference only and not installed into consumer repos; `AGENTS.md` stays lean (managed blocks only) and points here for detail.
+
 ## Rolling your own package
 
 Copy this directory, edit `package.json` (keep `"format": 2`), add artifact
