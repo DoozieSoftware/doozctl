@@ -254,17 +254,34 @@ export class App {
 
   /**
    * plan: create a repository-local engineering Plan under
-   * `.dooz/plans/active/`. The method resolves through the repository's
-   * adopted workflows (`standard` by default) and must be adopted to succeed;
-   * the plan id is derived from --title when given, otherwise it is the method
+   * `.dooz/plans/active/`. Workflows are optional per V2-SPEC: a method id is
+   * validated as kebab-case, but the plan is created even when the workflow
+   * has not been adopted — status/verify will surface the adoption problem.
+   * Duplicate or malformed workflows, and invalid evidence declarations, still
+   * fail loudly so plans are never minted against an unvalidatable contract.
+   * The plan id is derived from --title when given, otherwise it is the method
    * id. A collision never overwrites.
    */
   async plan(args: string[]): Promise<number> {
     const parsed = parsePlanArgs(args);
     const root = parsed.repo ?? ".";
-    const method = await this.resolveWorkflow(root, parsed.method ?? DEFAULT_METHOD);
+    const requestedMethod = parsed.method ?? DEFAULT_METHOD;
+    let methodId: string;
+    try {
+      const workflow = await this.resolveWorkflow(root, requestedMethod);
+      methodId = workflow.id;
+    } catch (error) {
+      if (
+        error instanceof UsageError &&
+        error.message.startsWith(`unknown plan method: ${requestedMethod}`)
+      ) {
+        methodId = requestedMethod;
+      } else {
+        throw error;
+      }
+    }
 
-    const id = parsed.title === undefined ? method.id : kebabize(parsed.title);
+    const id = parsed.title === undefined ? methodId : kebabize(parsed.title);
     if (!isValidPlanId(id)) {
       throw new UsageError(
         '--title must produce a valid plan id (lowercase kebab-case). Example: --title "attendance punch sync" creates id attendance-punch-sync.',
@@ -274,8 +291,8 @@ export class App {
     const plan = await this.planStore.create(
       root,
       parsed.title === undefined
-        ? { id, method: method.id }
-        : { id, method: method.id, title: parsed.title },
+        ? { id, method: methodId }
+        : { id, method: methodId, title: parsed.title },
     );
     this.deps.print(this.formatPlanReport(plan));
     return ExitCode.OK;

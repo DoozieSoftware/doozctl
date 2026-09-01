@@ -752,26 +752,26 @@ describe("App plan", () => {
     expect(content).toContain("- method: client-release");
   });
 
-  it("rejects an unadopted method with a usage error and writes nothing", async () => {
+  it("creates a plan even when the workflow is not yet adopted (workflows are optional)", async () => {
     const dir = await tmp();
     await adoptWorkflow(dir, "bug-fix");
     const app = new App(new Engine(), buildDeps().deps);
 
-    await expect(app.plan([dir, "--method", "nope"])).rejects.toMatchObject({
-      name: "UsageError",
-      exitCode: 2,
-    });
-    await expect(app.plan([dir, "--method", "nope"])).rejects.toThrow(/unknown plan method: nope/);
-    expect(await listActive(dir)).toEqual([]);
+    await expect(app.plan([dir, "--method", "nope"])).resolves.toBe(0);
+    expect(await listActive(dir)).toEqual(["2026-08-09-nope.md"]);
+    const content = await readFile(path.join(active(dir), "2026-08-09-nope.md"), "utf-8");
+    expect(content).toContain("- method: nope");
   });
 
-  it("rejects the default method when it is not adopted", async () => {
+  it("creates a plan with the default method even when it is not adopted (workflows optional)", async () => {
     const dir = await tmp();
     await adoptWorkflow(dir, "bug-fix");
     const app = new App(new Engine(), buildDeps().deps);
 
-    await expect(app.plan([dir])).rejects.toMatchObject({ name: "UsageError", exitCode: 2 });
-    await expect(app.plan([dir])).rejects.toThrow(/unknown plan method: standard/);
+    await expect(app.plan([dir])).resolves.toBe(0);
+    expect(await listActive(dir)).toEqual(["2026-08-09-standard.md"]);
+    const content = await readFile(path.join(active(dir), "2026-08-09-standard.md"), "utf-8");
+    expect(content).toContain("- method: standard");
   });
 
   it("rejects an invalid method id as a usage error", async () => {

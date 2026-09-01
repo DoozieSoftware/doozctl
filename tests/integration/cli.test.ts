@@ -982,23 +982,36 @@ describe("doozctl plan (integration)", () => {
     tempDirs.push(repo);
     const streams = capture();
 
-    const code = await runCli(["plan", repo, "--method", "nope"], buildDispatcher(), streams);
+    const code = await runCli(["plan", repo, "--method", "../escape"], buildDispatcher(), streams);
     expect(code).toBe(2);
-    expect(streams.err()).toContain("unknown plan method: nope");
+    expect(streams.err()).toContain("invalid plan method: ../escape");
     expect(await listActive(repo)).toEqual([]);
   });
 
-  it("rejects the unadopted default method with guidance", async () => {
+  it("creates a plan even when the default workflow is not adopted (workflows optional)", async () => {
     const repo = await mkdtemp(path.join(tmpdir(), "doozctl-plan-repo-"));
     await adoptWorkflow(repo, "bug-fix");
     tempDirs.push(repo);
-    const streams = capture();
 
-    const code = await runCli(["plan", repo], buildDispatcher(), streams);
-    expect(code).toBe(2);
-    expect(streams.err()).toContain("unknown plan method: standard");
-    expect(streams.err()).toContain(".dooz/workflows/adopted/");
-    expect(await listActive(repo)).toEqual([]);
+    const code = await runCli(["plan", repo], buildDispatcher());
+    expect(code).toBe(0);
+    expect(await listActive(repo)).toEqual(["2026-08-09-standard.md"]);
+    expect(await readFile(path.join(active(repo), "2026-08-09-standard.md"), "utf-8")).toContain(
+      "- method: standard",
+    );
+  });
+
+  it("creates a plan even when the workflow is not yet adopted (workflows optional)", async () => {
+    const repo = await mkdtemp(path.join(tmpdir(), "doozctl-plan-repo-"));
+    await adoptWorkflow(repo, "bug-fix");
+    tempDirs.push(repo);
+
+    const code = await runCli(["plan", repo, "--method", "nope"], buildDispatcher());
+    expect(code).toBe(0);
+    expect(await listActive(repo)).toEqual(["2026-08-09-nope.md"]);
+    expect(await readFile(path.join(active(repo), "2026-08-09-nope.md"), "utf-8")).toContain(
+      "- method: nope",
+    );
   });
 
   it("creates a plan using a project-local workflow", async () => {
