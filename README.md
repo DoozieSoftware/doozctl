@@ -102,8 +102,10 @@ doozctl verify [repo]                         # check the active Plan's required
 
 `plan` resolves `--method` against the workflows the repository has adopted
 under `.dooz/workflows/adopted/` (from a Standards Package) or
-`.dooz/workflows/project/`; the default method is `standard`, and it too must
-be adopted. The sample Standards Package ships the five initial methods in
+`.dooz/workflows/project/`; the default method is `standard`. Workflows are
+optional — `plan` succeeds even when the method is not yet adopted; `status`
+and `verify` surface the adoption problem and evidence degrades honestly (D-01).
+The sample Standards Package ships the five initial methods in
 `standards/workflows/`.
 
 `verify` reads the adopted workflow's `## Required Evidence` checklist
@@ -134,7 +136,7 @@ See [ARCHITECTURE.md](https://github.com/DoozieSoftware/doozctl/blob/main/ARCHIT
 
 ## Status
 
-All eight workflows are implemented and tested (483 tests, ~96% coverage):
+All eight workflows are implemented and tested (484 tests, 96.21% statements / 93.38% branches, built `94.97 KB`):
 
 - ✅ init
 - ✅ sync
@@ -145,8 +147,8 @@ All eight workflows are implemented and tested (483 tests, ~96% coverage):
 - ✅ plan
 - ✅ verify
 
-See [ROADMAP.md](https://github.com/DoozieSoftware/doozctl/blob/main/ROADMAP.md) for what is planned next and
-[RELEASE_CHECKLIST.md](https://github.com/DoozieSoftware/doozctl/blob/main/RELEASE_CHECKLIST.md) for the v1.0 release gate.
+See [ROADMAP.md](https://github.com/DoozieSoftware/doozctl/blob/main/ROADMAP.md) for what shipped in `2.0.0-rc.1` + D-01 and what is next, and
+`docs/release/V2-CLOSE-OUT.md` for the `2.0.0` promotion gate.
 
 ## v1.0 definition
 

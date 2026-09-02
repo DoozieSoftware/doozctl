@@ -36,6 +36,8 @@ Validate           — check content against optional schemas
 Write              — persist merged artifacts and update the manifest
 ```
 
+`init` runs the full pipeline; `sync` re-renders from persisted analysis (never re-analyzes, byte-identical); `summarize` adds `session` variables; `doctor`/`status`/`verify` are **read-only** — they never reach `Write`. `plan`/`verify`/`status` compose the v2 control plane (`PlanStore` + `adopted` workflows + evidence `report`) outside the artifact pipeline.
+
 The `Engine` is only a step runner. It holds no standards-specific behavior. Each command selects its own steps — read-only commands cannot reach write.
 
 ## Layers
@@ -147,6 +149,13 @@ A missing destination is written directly; merge applies only to files that alre
 ```text
 .dooz/  manifest.json        engine state (which artifacts were generated,
                              each bound to its destination)
+        plans/
+          active/            PLANNED … MERGED (one file per plan, opaque Markdown)
+          completed/         COMPLETED
+          archive/           ABANDONED (reserved)
+        workflows/
+          adopted/           copied from Standards Package (optional)
+          project/           project-specific methods (optional)
 .ai/    current-context.md   AI-readable memory (declared artifact, summarize)
         repository-analysis.json
         sessions/            immutable session summaries (declared artifacts)
@@ -155,7 +164,9 @@ A missing destination is written directly; merge applies only to files that alre
 `.dooz/manifest.json` and `.ai/repository-analysis.json` are engine state,
 written directly. `.ai/current-context.md` and `.ai/sessions/` are artifacts
 declared by the Standards Package — the engine renders them like any other
-artifact; the package defines their shape.
+artifact; the package defines their shape. `.dooz/plans/` and
+`.dooz/workflows/` are **adopted control-plane state** — Markdown, committed,
+validated (not executed) by the engine; workflows are optional per `V2-SPEC`.
 
 Storage enforces sandbox containment against real filesystem paths: symlinks
 inside the repository — including dangling symlinks — cannot be used to read

@@ -354,6 +354,12 @@ Do not silently change the frozen engine. v1 fixes belong on `release/v1`.
 > are consciously postponed — see `docs/release/V2-CLOSE-OUT.md`. Promotion
 > to final 2.0.0 is gated on manual testing
 > (`docs/v2/V2-MANUAL-TESTING.md`).
+>
+> **Addendum 2026-09-02 — D-01:** `plan` workflows are now optional — `plan`
+> succeeds without an adopted workflow; `status`/`verify` degrade honestly and
+> surface `Plan X requires workflow Y, but that workflow is not adopted`. This
+> restores `V2-SPEC` *Workflows are optional* invariant. Addendum does not change
+> contracts `PLAN-SPEC`/`WORKFLOW-SPEC`. See `V2-CLOSE-OUT` addendum.
 
 | Phase | Deliverable                            | Gate                                         |
 | ----- | -------------------------------------- | -------------------------------------------- |

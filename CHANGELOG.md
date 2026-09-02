@@ -4,6 +4,37 @@ All notable changes to DoozCTL are documented here, following
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased] — D-01 + Dogfood Prep (2026-09-02)
+
+### Fixed
+
+- **D-01 (P1): Workflows optional for `plan`** — `doozctl plan --method <id>` now succeeds even when the workflow has not been adopted; `status`/`verify` surface the adoption problem and evidence degrades honestly. Fixes the optionality violation (`V2-SPEC` workflows optional) and updates `V2-MANUAL-TESTING` `M-03` (was `exit 2`, now `0`). `M-01..M-12` 26/26 passed.
+- Tests: 484 passed (30 files), 96.21% statements / 93.38% branches, built `94.97 KB`.
+
+### Added
+
+- **Dogfood:** 3 repos initialized on the private `@dooziesoft/standards 0.1.0` — `vehicle_management` (Daiichi), `tiei_hub` (TIEI), `fims_erp` (FEPL) — each `5 base workflows` + `client-release` (`changelog:CHANGELOG.md` + `version:package.json`/`composer.json`), single `PLANNED` plan, committed; `docs/GETTING_STARTED.md` day-to-day driver + `docs/policy/ENGINEERING_DISCIPLINE.md` distilled discipline.
+- `standards/doozie-practice.md` reference doc (not an artifact) so `AGENTS.md` stays lean.
+
+## [2.0.0-rc.1] — 2026-08-21
+
+Stable `v2` Engineering Control Plane on the frozen `v1.0.0` engine (`release/v1`).
+
+### Added — v2 control plane (phases 2.1–2.10)
+
+- Frozen contracts: `V2-SPEC` `PLAN-SPEC v1.0.0` `WORKFLOW-SPEC v1.2.0` `ARCHITECTURE` (`5a37d03`)
+- Plan domain: 4-field metadata + opaque Markdown, forward-only lifecycle (`d281ece`)
+- `doozctl plan` — adoption-resolved, collision-safe (`786b8db`)
+- Workflow adoption — file presence `adopted/`/`project/`, no registry, 5 base methods (`0f2c95f`)
+- `doozctl status` control-plane view, read-only proven (`041e8aa`)
+- Evidence contract — 8 cats `acceptance-criteria, changelog:<path>, commit, git-state, release, tests, verification, version:<path>` (`a8a42c8` + `abc8f89`)
+- Validation + `verify` `READY/NOT READY` + test-fact visibility + path-bound `changelog`/`version` (`fd8f37d`→`abc8f89`)
+- Tests: 483 passed, 96.19% / 93.36%, `WORKFLOW-SPEC v1.2.0` at close
+
+### Notes
+
+- See `docs/release/V2-CLOSE-OUT.md` for the `2.0.0-rc.1` close-out and the `2.0.0` promotion gate (`M-01..M-32`).
+
 ## [1.0.0] — 2026-08-13
 
 Stable release of the generic, vendor-neutral Repository Standards Engine.

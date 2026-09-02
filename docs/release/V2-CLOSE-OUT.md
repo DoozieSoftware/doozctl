@@ -7,17 +7,25 @@ items (2.11–2.15) are **deferred, not forgotten** — they are gated on manual
 testing of what shipped (see `docs/v2/V2-MANUAL-TESTING.md`). Promotion to
 final **2.0.0** happens when the manual-testing exit criteria pass.
 
+> **Addendum 2026-09-02 — D-01 + Dogfood Prep (on `main`, not yet tagged):**
+> `plan` workflows are now optional (P1 fix `dac0fa7`) — `plan` succeeds without
+> an adopted workflow, `status`/`verify` surface the adoption problem. `M-01..M-12`
+> 26/26 passed. Private `@dooziesoft/standards 0.1.0` + 3 repos (`vehicle_management`,
+> `tiei_hub`, `fims_erp`) initialized with `5 base + client-release`
+> (`changelog:CHANGELOG.md` + `version:package.json`/`composer.json`). Next: `M-13..M-32`
+> + Linux/Windows probe before tagging `2.0.0`.
+
 ---
 
 ## Release facts
 
 | Item                     | Value                                                                |
 | ------------------------ | -------------------------------------------------------------------- |
-| Version                  | **2.0.0-rc.1**                                                       |
+| Version                  | **2.0.0-rc.1** + D-01 (`dac0fa7`) on `main` — not yet tagged         |
 | Base                     | frozen v1.0.0 engine (untouched semantics)                           |
-| Close commit             | this commit (`docs(release): add v2 close-out report`)               |
-| Tests                    | **483 passed** (30 files)                                            |
-| Coverage                 | 96.19% statements / 93.36% branches                                  |
+| Close commit             | `2ec3472` (`docs(release): add v2 close-out report`) + `dac0fa7` D-01 |
+| Tests                    | **484 passed** (30 files) — was 483 at close                         |
+| Coverage                 | 96.21% statements / 93.38% branches — was 96.19% / 93.36%            |
 | Typecheck / lint / build | green                                                                |
 | Format                   | green except pre-existing `docs/release/V1-FREEZE.md` (out of scope) |
 

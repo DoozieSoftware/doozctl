@@ -1,8 +1,8 @@
 # DoozCTL v2 — Phase 2 Manual Testing Readiness Analysis
 
-**Status:** Ready for manual testing (GO, with caveats)
-**Date:** 2026-08-21
-**Covers:** v2 phases 2.1–2.10 on top of frozen v1.0.0
+**Status:** Ready for manual testing (GO, with caveats) — **Addendum 2026-09-02: D-01 applied, M-03 updated, M-01..M-12 26/26 passed**
+**Date:** 2026-08-21 · **Addendum 2026-09-02**
+**Covers:** v2 phases 2.1–2.10 on top of frozen v1.0.0 + D-01 (workflows optional) + dogfood prep (3 repos)
 **Purpose:** give a human tester everything needed to manually validate the v2
 Engineering Control Plane before phases 2.11–2.15 (handoff, doctor, E2E,
 red team, freeze).
@@ -24,10 +24,10 @@ red team, freeze).
 | 2.9   | Test-fact visibility                           | `f8dfd1f` | ✅    |
 | 2.10  | Path-bound changelog/version evidence (v1.2.0) | `abc8f89` | ✅    |
 
-**Automated safety net at time of writing:** 483 tests / 30 files green;
-coverage 96.19% statements / 93.36% branch; typecheck, lint and build clean;
+**Automated safety net at time of writing:** 484 tests / 30 files green;
+coverage 96.21% statements / 93.38% branch; typecheck, lint and build clean;
 `format:check` fails only on the pre-existing, out-of-scope
-`docs/release/V1-FREEZE.md`.
+`docs/release/V1-FREEZE.md`. Addendum 2026-09-02: `M-01..M-12` automated 26/26 passed on `dac0fa7`.
 
 ---
 
@@ -67,12 +67,12 @@ repositories, and the semantics questions listed in §9.
 
 # 4. Environment & Setup
 
-Prerequisites: Node 18+, pnpm, git on PATH.
+Prerequisites: Node 20+, pnpm, git on PATH (`package.json` `engines.node >=20`; CI matrix 20/22/24).
 
 ```bash
 pnpm install
-pnpm build                 # produces dist/index.js
-pnpm test                  # must be green before you start: 483 passing
+pnpm build                 # produces dist/index.js (94.97 KB)
+pnpm test                  # must be green before you start: 484 passing
 ```
 
 Run the built CLI from any scratch directory:
@@ -145,10 +145,7 @@ means compare `find . -type f | sort | xargs shasum | shasum` before/after.
   create-a-plan next action.
 - **M-02 Uninitialized repository.** Fresh non-init dir: `dz status .` and
   `dz verify .` both print the not-initialized guidance, exit `(1)`.
-- **M-03 Create a plan.** Adopt nothing yet; `dz plan . --method bug-fix`
-  without adoption exits `(2)` with "unknown plan method". After writing
-  `.dooz/workflows/adopted/bug-fix.md` (valid minimal document), the same
-  command creates `.dooz/plans/active/<today>-bug-fix.md` `(0)`.
+- **M-03 Create a plan (workflows optional — D-01).** Without any adopted workflow, `dz plan . --method bug-fix` now **succeeds** `(0)` and creates `.dooz/plans/active/<today>-bug-fix.md`; `dz status`/`verify` degrade honestly and report `Plan X requires workflow 'bug-fix', but that workflow is not adopted`. With an adopted workflow (` .dooz/workflows/adopted/bug-fix.md` containing `- id: bug-fix`) it also succeeds `(0)` and enforces `Required Evidence`. Pre-D-01 this exited `(2)` — see addendum.
 - **M-04 Title-derived id.** `dz plan . --method bug-fix --title "Attendance Punch Sync"`
   creates id `attendance-punch-sync`; `--title "!!!"` exits `(2)` with usage.
 - **M-05 Collision never overwrites.** Repeat M-03 exactly → exit `(1)`,
@@ -296,5 +293,4 @@ These are design confirmations only humans/dogfooding can give:
 
 ---
 
-_Prepared from the repository state at commit `abc8f89`. Update the tables in
-§1 and the coverage figures if phases land after this revision._
+_Prepared from the repository state at commit `abc8f89`. Addendum 2026-09-02 at `dac0fa7`: D-01 + dogfood (vehicle_management, tiei_hub, fims_erp) with 5 base + client-release workflows. Update §1 and coverage figures if phases land after this revision._
