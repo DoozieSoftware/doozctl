@@ -4,7 +4,9 @@ All notable changes to DoozCTL are documented here, following
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased] — D-01 + Dogfood Prep (2026-09-02)
+## [2.0.0] — 2026-09-02
+
+Stable `v2` Engineering Control Plane — promotion of `2.0.0-rc.1` with **D-01 override** (`workflows optional`, `M-01..M-12` 26/26) and 3-repo dogfood + day-to-day driver.
 
 ### Fixed
 
@@ -13,7 +15,7 @@ All notable changes to DoozCTL are documented here, following
 
 ### Added
 
-- **Dogfood:** 3 repos initialized on the private `@dooziesoft/standards 0.1.0` — `vehicle_management` (Daiichi), `tiei_hub` (TIEI), `fims_erp` (FEPL) — each `5 base workflows` + `client-release` (`changelog:CHANGELOG.md` + `version:package.json`/`composer.json`), single `PLANNED` plan, committed; `docs/GETTING_STARTED.md` day-to-day driver + `docs/policy/ENGINEERING_DISCIPLINE.md` distilled discipline.
+- **Dogfood:** 4 repos initialized on the private `@dooziesoft/standards 0.1.0` — `vehicle_management` (Daiichi), `tiei_hub` (TIEI), `fims_erp` (FEPL), `workpermit` — each `5 base workflows` + `release`/`client-release` (`changelog:CHANGELOG.md` + `version:package.json`/`composer.json`), single `PLANNED` plan, committed; `docs/GETTING_STARTED.md` day-to-day driver + `docs/policy/ENGINEERING_DISCIPLINE.md` distilled discipline.
 - `standards/doozie-practice.md` reference doc (not an artifact) so `AGENTS.md` stays lean.
 
 ## [2.0.0-rc.1] — 2026-08-21

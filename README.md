@@ -136,7 +136,7 @@ See [ARCHITECTURE.md](https://github.com/DoozieSoftware/doozctl/blob/main/ARCHIT
 
 ## Status
 
-All eight workflows are implemented and tested (484 tests, 96.21% statements / 93.38% branches, built `94.97 KB`):
+All eight workflows are implemented and tested (484 tests, 96.21% statements / 93.38% branches, built `94.97 KB`) — **`2.0.0` released 2026-09-02** (override: `M-01..M-12` 26/26, 4-repo dogfood `workpermit` gate `READY`):
 
 - ✅ init
 - ✅ sync
