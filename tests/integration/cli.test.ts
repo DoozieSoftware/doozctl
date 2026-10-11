@@ -174,7 +174,8 @@ function buildDispatcher(print: (message: string) => void = () => {}): Dispatche
     .register("summarize", app.summarize.bind(app))
     .register("status", app.status.bind(app))
     .register("plan", app.plan.bind(app))
-    .register("verify", app.verify.bind(app));
+    .register("verify", app.verify.bind(app))
+    .register("context validate", app.contextValidate.bind(app));
 }
 
 /** Captures stdout/stderr writes for assertions. */
@@ -202,9 +203,10 @@ function capture(): { stdout: Writable; stderr: Writable; out: () => string; err
 }
 
 describe("doozctl CLI (integration)", () => {
-  it("exposes the eight core commands", () => {
+  it("exposes the core commands including context validate", () => {
     expect(buildDispatcher().commands()).toEqual([
       "analyze",
+      "context validate",
       "doctor",
       "init",
       "plan",
@@ -246,6 +248,33 @@ describe("doozctl CLI (integration)", () => {
 
     // summarize without a session file exits 2 with usage guidance.
     expect(await runCli(["summarize", repo, pkg], dispatcher)).toBe(2);
+  });
+
+  it("context validate reports provenance on an initialized repository", async () => {
+    const { repo, pkg } = await makeRepoAndPackage();
+    await mkdir(path.join(repo, "src"), { recursive: true });
+    await writeFile(path.join(repo, "src", "main.ts"), "export {};\n");
+    const streams = capture();
+    const dispatcher = buildDispatcher((message) => streams.stdout.write(message + "\n"));
+
+    expect(await runCli(["init", repo, pkg], dispatcher)).toBe(0);
+    // Not a git repository, so the analysis has no commit: UNKNOWN is
+    // reported but never fails the command (D1).
+    const code = await runCli(["context", "validate", repo], dispatcher);
+    expect(code).toBe(0);
+    const out = streams.out();
+    expect(out).toContain("Context Integrity");
+    expect(out).toContain("? repository-analysis.json — UNKNOWN");
+    expect(out).toContain("Result: 0 stale, 1 unknown, 0 invalid");
+  });
+
+  it("context validate on an uninitialized repository exits 1 with guidance", async () => {
+    const { repo } = await makeRepoAndPackage();
+    const streams = capture();
+    const dispatcher = buildDispatcher((message) => streams.stdout.write(message + "\n"));
+    const code = await runCli(["context", "validate", repo], dispatcher, streams);
+    expect(code).toBe(1);
+    expect(streams.out()).toContain("DoozCTL is not initialized in this repository.");
   });
 
   it("doctor prints a health report to stdout", async () => {

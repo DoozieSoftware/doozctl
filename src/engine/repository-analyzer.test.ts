@@ -20,7 +20,7 @@ function analyze(name: string): ReturnType<RepositoryAnalyzer["analyze"]> {
 describe("RepositoryAnalyzer", () => {
   it("reports a plain directory as not a git repository", async () => {
     const analysis = await analyze("fixture-node");
-    expect(analysis.git).toEqual({ isRepository: false, branch: null, dirty: false });
+    expect(analysis.git).toEqual({ isRepository: false, branch: null, dirty: false, commit: null });
   });
 
   it("resolves the analyzed root to an absolute path", async () => {

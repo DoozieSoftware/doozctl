@@ -12,6 +12,7 @@ Options:
 Commands:
   analyze [args...]    Re-analyze the repository and update the repository
                        memory (.ai/repository-analysis.json).
+  context              Validate repository context integrity. Read-only.
   doctor [args...]     Validate the repository and report problems. Read-only.
   init [args...]       Initialize a repository with AI repository standards.
   plan [args...]       Create a repository-local engineering Plan (intent,

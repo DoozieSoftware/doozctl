@@ -73,6 +73,10 @@ describe("command pipelines", () => {
       tool: "",
       model: "",
       user: "",
+      sourcePlan: "",
+      planScopePaths: [],
+      planTrust: "",
+      planDrift: [],
     });
     expect(steps.map(fnOf)).toContain("writeStep");
     expect(steps.map(fnOf)).toContain("mergeStep");

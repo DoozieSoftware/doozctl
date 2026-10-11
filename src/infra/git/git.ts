@@ -12,6 +12,12 @@ export interface RepositoryInfo {
   branch: string | null;
   /** Whether the working tree differs from HEAD. */
   dirty: boolean;
+  /**
+   * Short HEAD hash, or null when HEAD has no commit yet (an empty
+   * repository) or the read failed. The repository state an artifact's
+   * baseline describes (CONTEXT-SPEC §5, v3 A-2).
+   */
+  commit: string | null;
 }
 
 /**
@@ -33,12 +39,63 @@ export class GitService {
     const branchOut = await this.git(root, ["rev-parse", "--abbrev-ref", "HEAD"]);
     const branch = branchOut !== null && branchOut !== "HEAD" ? branchOut : null;
     const status = await this.git(root, ["status", "--porcelain"]);
-    return { root, branch, dirty: status !== null && status.length > 0 };
+    const commit = await this.git(root, ["rev-parse", "--short", "HEAD"]);
+    return { root, branch, dirty: status !== null && status.length > 0, commit };
   }
 
   /** Short commit hash of HEAD, or null when not in a repository. */
   async commitHash(dir: string): Promise<string | null> {
     return this.git(dir, ["rev-parse", "--short", "HEAD"]);
+  }
+
+  /**
+   * Resolve any revision expression (full/short hash, `HEAD`, a ref) to its
+   * full commit hash, or null when it cannot be resolved unambiguously.
+   * Read-only. The integrity engine compares full hashes so short-hash
+   * baselines compare safely (v3 A-5, P06).
+   */
+  async revParse(dir: string, rev: string): Promise<string | null> {
+    return this.git(dir, ["rev-parse", "--verify", rev]);
+  }
+
+  /**
+   * Whether `hash` is an ancestor of HEAD (HEAD itself included). Read-only.
+   * Returns false on any git failure — the integrity engine classifies an
+   * unresolvable or non-ancestor baseline as INVALID either way (v3 A-5),
+   * so exit 1 (not an ancestor) and git errors need not be distinguished.
+   */
+  async isAncestor(dir: string, hash: string): Promise<boolean> {
+    const result = await this.git(dir, ["merge-base", "--is-ancestor", hash, "HEAD"]);
+    return result !== null;
+  }
+
+  /**
+   * Paths changed between `fromHash` and HEAD, restricted to `scopePaths`
+   * (each an exact path or directory prefix — git runs the match, no
+   * matcher, v3 D5). Empty when the commits are equal or nothing scoped
+   * changed. Read-only.
+   */
+  async changedPathsSince(dir: string, fromHash: string, scopePaths: string[]): Promise<string[]> {
+    const out = await this.git(dir, [
+      "diff",
+      "--name-only",
+      `${fromHash}..HEAD`,
+      "--",
+      ...scopePaths,
+    ]);
+    if (out === null) {
+      return [];
+    }
+    return out.split("\n").filter((line) => line !== "");
+  }
+
+  /**
+   * Whether `path` (exact file path or directory prefix) exists at HEAD.
+   * Read-only — the S3 scope-missing probe (v3 A-5).
+   */
+  async pathExistsAtHead(dir: string, path: string): Promise<boolean> {
+    const out = await this.git(dir, ["ls-tree", "HEAD", "--", path]);
+    return out !== null && out.length > 0;
   }
 
   /**

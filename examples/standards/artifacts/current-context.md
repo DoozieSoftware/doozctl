@@ -1,3 +1,5 @@
+{{session.contextBaseline}}
+
 # Current Objective
 
 {{session.objective}}

@@ -1,4 +1,5 @@
 import type { GitService } from "../infra/git/git.js";
+import { renderBaseline, type BaselineFields } from "../model/baseline.js";
 import { createArtifact } from "../model/artifact.js";
 import type {
   Artifact,
@@ -102,7 +103,11 @@ export interface SessionDeps {
  * AI-authored session content into sections, applies carry-forward from the
  * previous current context (Objective and Open Questions the session did not
  * change), records git facts, and refuses to overwrite an existing immutable
- * session file (a same-second collision).
+ * session file (a same-second collision). v3 (P11) composes the
+ * machine-provenance `## Baseline` blocks (`session.baseline` for the session
+ * record, `session.contextBaseline` for current-context, both carrying the
+ * plan's scope paths forward) from the shared grammar, plus the §13
+ * stale-context qualifier (`session.planContext`) — presentation only.
  */
 export function sessionStep(deps: SessionDeps, input: SessionInput): PipelineStep {
   return named("session", async (ctx) => {
@@ -112,8 +117,51 @@ export function sessionStep(deps: SessionDeps, input: SessionInput): PipelineSte
     const previousRaw = await readOrNull(repo, ".ai/current-context.md");
     const previous = extractPreviousContext(previousRaw ?? "");
     const fields = resolveContextFields(sections, previous);
-    const commit = (await deps.git.commitHash(ctx.root)) ?? "";
-    const branch = ctx.analysis?.git.branch ?? "";
+    // v3 (A-2, D2): read commit, branch and dirty live in one detect() call.
+    // The branch must not come from the stored analysis — stored facts can be
+    // stale relative to the live commit (the audit's §3.1 latent bug).
+    const gitInfo = await deps.git.detect(ctx.root);
+    const commit = gitInfo?.commit ?? "";
+    const branch = gitInfo?.branch ?? "";
+    const dirty = gitInfo === null ? "" : gitInfo.dirty ? "yes" : "no";
+    const source = input.sourcePlan === "" ? "" : `plan:${input.sourcePlan}`;
+
+    // v3 (P11, A-4/A-6/§13): the machine-provenance `## Baseline` blocks,
+    // rendered from the shared grammar (renderBaseline) so templates place
+    // them without re-implementing it. The session block labels its
+    // carry-forward `source: plan:<id>`; the current-context block labels
+    // its own `source: session:<id>`. Both carry the plan's scope paths
+    // forward (A-6 inheritance) and both are empty outside a git repository
+    // — a gitless handover stays UNKNOWN, never INVALID.
+    const hasGitFacts = gitInfo !== null && gitInfo.commit !== null;
+    const baselineFields: BaselineFields | null = hasGitFacts
+      ? {
+          commit,
+          branch: gitInfo.branch ?? "(detached)",
+          dirty: gitInfo.dirty ? "yes" : "no",
+          scopePaths: [...input.planScopePaths],
+        }
+      : null;
+    const baseline =
+      baselineFields === null
+        ? ""
+        : renderBaseline({ ...baselineFields, source, ownership: "mixed" });
+    const contextBaseline =
+      baselineFields === null
+        ? ""
+        : renderBaseline({ ...baselineFields, source: `session:${input.id}`, ownership: "mixed" });
+
+    // v3 (P11, §13.4): the stale-context qualifier carried in the session
+    // record, so the reader sees what the session does and does not cover.
+    // Empty unless the active plan's P06 result is STALE. Presentation only —
+    // surfaced, never enforced, and never a lifecycle change.
+    const planContext =
+      input.sourcePlan !== "" && input.planTrust === "STALE"
+        ? [
+            `Known stale context: plan '${input.sourcePlan}' is STALE — re-understand the described scope before continuing.`,
+            ...input.planDrift.map((reason) => `- ${reason}`),
+          ].join("\n")
+        : "";
 
     ctx.variables = {
       ...ctx.variables,
@@ -125,6 +173,11 @@ export function sessionStep(deps: SessionDeps, input: SessionInput): PipelineSte
         user: input.user,
         commit,
         branch,
+        dirty,
+        source,
+        baseline,
+        contextBaseline,
+        planContext,
         content,
         objective: capField(fields.objective),
         summary: capField(fields.summary),

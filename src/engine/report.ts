@@ -1,3 +1,4 @@
+import { parseBaseline } from "../model/baseline.js";
 import type { Analysis, Manifest } from "../model/model.js";
 import {
   PLAN_LIFECYCLE,
@@ -19,6 +20,13 @@ import {
   type EvidenceRequirement,
 } from "../workflows/evidence.js";
 import type { ExecutionContext } from "./engine.js";
+import {
+  evaluateDocumentIntegrity,
+  evaluateGitFactsIntegrity,
+  type IntegrityGit,
+  type IntegrityResult,
+  type TrustState,
+} from "./integrity.js";
 import { validateManagedBlocks } from "./merge.js";
 
 /**
@@ -87,13 +95,21 @@ function describeTestFacts(analysis: Analysis): string | null {
 /**
  * Status 2.0: a concise, read-only view of the repository and its v2 control
  * plane — repository facts, initialization, the active plan, its workflow,
- * lifecycle progress and the next action. Never writes.
+ * lifecycle progress and the next action. Never writes. The v3 Context
+ * summary (V3-P08) is an observation surface over the same fixed artifact
+ * inventory as `context validate`, aggregated through the integrity engine —
+ * status never determines freshness itself, and context outcomes never
+ * change the existing status exit code. V3-P09 renders the §12 plan-drift
+ * observation under the Active Plan section when that plan's P06 result is
+ * STALE, from the same evaluation — never a second freshness signal.
  */
 export async function buildStatusReport(
   root: string,
   analysis: Analysis,
   manifest: Manifest,
   planStore: PlanStore,
+  store: ContextValidateAnalysisStore,
+  git: IntegrityGit,
 ): Promise<CommandReport> {
   const problems: string[] = [];
   const lines: string[] = ["DoozCTL Status", ""];
@@ -127,6 +143,12 @@ export async function buildStatusReport(
     return { report: lines.join("\n"), problems };
   }
 
+  // V3 Context (P08/P09): one evaluation of the fixed inventory, shared by the
+  // Active Plan section (whose §12 drift observation consumes the plan's P06
+  // result above) and this aggregate summary. Status never evaluates freshness
+  // itself, and these observations never change the exit code.
+  const context = await evaluateContextRows(root, planStore, store, git);
+
   if (planFiles.length === 0) {
     lines.push("", "Active Plan", "  None", "", "Next Action");
     lines.push("  Create a plan with:", "    doozctl plan --method <adopted-method>");
@@ -138,7 +160,25 @@ export async function buildStatusReport(
     }
     lines.push("", "  Resolve the ambiguity before continuing.");
   } else {
-    lines.push(...(await describeSinglePlan(root, planFiles[0] as string, problems)));
+    const file = planFiles[0] as string;
+    lines.push(
+      ...(await describeSinglePlan(
+        root,
+        file,
+        problems,
+        context.rows.find((row) => row.label === `plans/active/${file}`),
+        git,
+      )),
+    );
+  }
+
+  lines.push("", "Context");
+  lines.push(`  Current   ${context.counts.current}`);
+  lines.push(`  Stale     ${context.counts.stale}`);
+  lines.push(`  Unknown   ${context.counts.unknown}`);
+  if (context.counts.invalid > 0) {
+    // INVALID is never silently folded into STALE or UNKNOWN.
+    lines.push(`  Invalid   ${context.counts.invalid}`);
   }
 
   return { report: lines.join("\n"), problems };
@@ -160,6 +200,8 @@ async function describeSinglePlan(
   root: string,
   file: string,
   problems: string[],
+  contextRow: { trust: TrustState; reasons: string[] } | undefined,
+  git: IntegrityGit,
 ): Promise<string[]> {
   const id = planIdFromFilename(file) ?? file;
   let plan;
@@ -186,6 +228,10 @@ async function describeSinglePlan(
     lines.push("", `  ${workflowProblem}`);
   }
 
+  // V3 Plan drift (P09): the §12 observation, rendered from the plan's P06
+  // integrity result — empty unless the plan is STALE.
+  lines.push(...(await planDriftLines(root, plan, contextRow, git)));
+
   lines.push("", "Progress");
   for (const stage of PROGRESS_STAGES) {
     lines.push(`  ${stage.label.padEnd(11)}${stageReached(plan.status, stage.status) ? "✓" : "✗"}`);
@@ -194,6 +240,45 @@ async function describeSinglePlan(
   lines.push("", "Next Action");
   lines.push(`  ${extractNextAction(plan.content) ?? "Not specified."}`);
   return lines;
+}
+
+/**
+ * The §12 plan-drift observation (V3-P09) for a plan whose P06 integrity
+ * result is STALE: the STALE context, baseline → HEAD, the re-understand
+ * instruction, and the integrity engine's own deterministic reason lines
+ * verbatim. This is presentation over an existing P06 result — never a second
+ * freshness signal, never a new evaluation mechanism.
+ *
+ * Empty for every other trust state. In particular a plan whose repository
+ * moved outside its described scope stays CURRENT/TRUSTED with the §6.3 note
+ * and must never produce drift (Scenario B). Strictly read-only: the plan
+ * file, its lifecycle state and the command's exit code are untouched.
+ */
+async function planDriftLines(
+  root: string,
+  plan: Plan,
+  result: { trust: TrustState; reasons: string[] } | undefined,
+  git: IntegrityGit,
+): Promise<string[]> {
+  if (result === undefined || result.trust !== "STALE") {
+    return [];
+  }
+  const baseline = parseBaseline(plan.content);
+  if (!baseline.present || !baseline.valid) {
+    return [];
+  }
+  const info = await git.detect(root);
+  const head = info?.commit ?? "unresolved";
+  const branch = info?.branch ?? "(detached)";
+  const tree = info?.dirty === true ? "uncommitted changes" : "clean";
+  return [
+    "  Context: STALE",
+    `  Baseline: ${baseline.fields.commit} → HEAD ${head} (branch: ${branch}, ${tree})`,
+    "  Re-understand the described scope before continuing.",
+    "",
+    "  Reason:",
+    ...result.reasons.map((reason) => `  - ${reason}`),
+  ];
 }
 
 /** Map a workflow resolution failure to the plan-centric problem message. */
@@ -279,6 +364,92 @@ async function boundFilePresent(
 /** Semantic-version form: three dot-separated numbers (industry standard). */
 const SEMVER_PATTERN = /\d+\.\d+\.\d+/;
 
+/**
+ * Grounding classes (CONTEXT-SPEC §11.1): how each canonical evidence
+ * category grounds. The vocabulary extension rule holds — extending a
+ * category is one table row plus one deterministic check, never a language.
+ */
+type GroundingClass = "LIVE" | "RECORDED" | "BASELINE";
+
+const GROUNDING_CLASS: Record<EvidenceCategory, GroundingClass> = {
+  "acceptance-criteria": "RECORDED",
+  changelog: "LIVE",
+  tests: "RECORDED",
+  verification: "RECORDED",
+  commit: "BASELINE",
+  "git-state": "LIVE",
+  release: "LIVE",
+  version: "LIVE",
+};
+
+/**
+ * The §11.2 qualifier vocabulary. `STALE-BASELINE` is the demotion token
+ * (GAUNTLET AS-4): a record that cannot be presented as grounding for the
+ * current repository state — either because its plan's baseline is STALE
+ * (§11.2 rule 2) or, for a `## Commit` hash, because the recorded commit is
+ * unreachable from HEAD (S4).
+ */
+const RECORDED_QUALIFIER = "recorded, not verified against HEAD";
+const STALE_BASELINE_QUALIFIER = "STALE-BASELINE";
+
+/** A commit-hash-shaped token: 7–40 hex characters on word boundaries. */
+const COMMIT_HASH_PATTERN = /\b[0-9a-f]{7,40}\b/i;
+
+/** The first hash-shaped token in a recorded section, or null. */
+function extractCommitHash(section: string): string | null {
+  const match = COMMIT_HASH_PATTERN.exec(section);
+  return match === null ? null : (match[0] ?? null);
+}
+
+/**
+ * The grounding qualifier for one evidence row (V3-P10, CONTEXT-SPEC §11.2).
+ * A pure annotation over the existing checks — it never changes any check
+ * result and never gates READY/NOT READY:
+ *
+ * - `LIVE` rows are checked against the current tree/git and stay unqualified
+ *   by the plan's trust state.
+ * - `RECORDED` rows show "recorded, not verified against HEAD"; a plan whose
+ *   P06 trust state is STALE demotes them to `STALE-BASELINE` (§11.2 rule 2).
+ * - `BASELINE` (`commit`) rows show the freshness of the recorded hash itself
+ *   (S4): unreachable → `STALE-BASELINE`; reachable but older than HEAD →
+ *   "recorded, not current"; == HEAD → "current". With no hash recorded (or
+ *   HEAD unresolvable) the row is recorded prose and falls back to the
+ *   recorded qualifier, demoted under a STALE plan.
+ */
+async function groundingQualifier(
+  root: string,
+  requirement: EvidenceRequirement,
+  plan: Plan,
+  planTrust: TrustState,
+  git: IntegrityGit,
+): Promise<string> {
+  const groundingClass = GROUNDING_CLASS[requirement.category];
+  if (groundingClass === "LIVE") {
+    return "LIVE";
+  }
+  if (groundingClass === "RECORDED") {
+    return planTrust === "STALE" ? STALE_BASELINE_QUALIFIER : RECORDED_QUALIFIER;
+  }
+  const hash = extractCommitHash(planSection(plan.content, "Commit"));
+  if (hash === null) {
+    return planTrust === "STALE" ? STALE_BASELINE_QUALIFIER : RECORDED_QUALIFIER;
+  }
+  const headHash = await git.revParse(root, "HEAD");
+  if (headHash === null) {
+    // No resolvable current state: the record cannot be verified against it.
+    return planTrust === "STALE" ? STALE_BASELINE_QUALIFIER : RECORDED_QUALIFIER;
+  }
+  const resolved = await git.revParse(root, hash);
+  if (resolved === null) {
+    return STALE_BASELINE_QUALIFIER;
+  }
+  if (resolved === headHash) {
+    return "current";
+  }
+  const reachable = await git.isAncestor(root, resolved);
+  return reachable ? "recorded, not current" : STALE_BASELINE_QUALIFIER;
+}
+
 /** Evaluate one declared requirement against recorded evidence and facts. */
 async function evaluateRequirement(
   root: string,
@@ -311,13 +482,18 @@ async function evaluateRequirement(
  * Verify: determine whether the active Plan has the required evidence per its
  * adopted workflow (WORKFLOW-SPEC). Read-only — it checks the presence
  * of recorded evidence and git facts; it never runs commands, never judges
- * quality, and never writes.
+ * quality, and never writes. V3-P09 adds the §12 plan-drift observation for a
+ * STALE plan, rendered from the same P06 integrity evaluation that grounds the
+ * context rows. V3-P10 adds the §11 grounding qualifier to every evidence row
+ * (LIVE / recorded / STALE-BASELINE / S4 commit freshness) from the same
+ * evaluation — an annotation column, never a check change: presence alone
+ * still gates READY/NOT READY and the problems list.
  */
 export async function buildVerifyReport(
   root: string,
   analysis: Analysis,
   planStore: PlanStore,
-  git: VerifyGit,
+  git: VerifyGit & IntegrityGit,
 ): Promise<CommandReport> {
   const problems: string[] = [];
   const lines: string[] = ["DoozCTL Verify", ""];
@@ -362,6 +538,14 @@ export async function buildVerifyReport(
   lines.push("Plan");
   lines.push(`  ID: ${plan.id}`, `  Method: ${plan.method}`, `  Status: ${plan.status}`);
 
+  // V3 Plan drift (P09): the same P06 evaluation that grounds context rows,
+  // consumed read-only. A STALE plan carries the §12 drift observation with
+  // its deterministic reason lines; a plan whose repository moved outside its
+  // described scope stays CURRENT and never drifts (Scenario B). Observation
+  // only — it never gates READY/NOT READY (P10 settles that interaction).
+  const planIntegrity = await evaluateDocumentIntegrity(plan.content, root, git);
+  lines.push(...(await planDriftLines(root, plan, planIntegrity, git)));
+
   let workflow;
   try {
     workflow = await resolveAdoptedWorkflow(root, plan.method);
@@ -393,6 +577,11 @@ export async function buildVerifyReport(
         row += `  ${facts}`;
       }
     }
+    // V3 Evidence grounding (P10): every row carries its grounding qualifier.
+    // The checks themselves are unchanged — presence alone still gates
+    // READY/NOT READY and the problems list; qualifiers are annotations.
+    const qualifier = await groundingQualifier(root, requirement, plan, planIntegrity.trust, git);
+    row += ` (${qualifier})`;
     lines.push(row);
     if (!present) {
       const detail = EVIDENCE_LABELS[requirement.category].missing;
@@ -421,6 +610,158 @@ export async function buildVerifyReport(
 /** Read an active plan file through the sandboxed Storage. */
 async function readPlanFile(root: string, file: string): Promise<string> {
   return new Storage(root).read(".dooz", "plans", "active", file);
+}
+
+/** The analysis reader `context validate` needs; RepositoryStore satisfies it. */
+export interface ContextValidateAnalysisStore {
+  loadAnalysis(dir: string): Promise<Analysis>;
+}
+
+/** Read a sandboxed artifact, or null when it vanished between inventory and read. */
+async function readContextArtifact(storage: Storage, parts: string[]): Promise<string | null> {
+  try {
+    return await storage.read(...parts);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return null;
+    }
+    throw error;
+  }
+}
+
+/** The fresh/trust counts of the fixed context inventory, per P06 results. */
+export interface ContextCounts {
+  current: number;
+  stale: number;
+  unknown: number;
+  invalid: number;
+}
+
+/**
+ * Walk the fixed context inventory (v3 A-4) and evaluate each artifact with
+ * the integrity engine. Shared by `context validate` (P07, per-row detail)
+ * and `status` (P08, aggregate summary) — the same inventory, the same
+ * evaluator, never an independent freshness implementation. Read-only.
+ */
+export async function evaluateContextRows(
+  root: string,
+  planStore: PlanStore,
+  store: ContextValidateAnalysisStore,
+  git: IntegrityGit,
+): Promise<{
+  counts: ContextCounts;
+  rows: Array<{ label: string; trust: TrustState; note: string | null; reasons: string[] }>;
+}> {
+  const counts: ContextCounts = { current: 0, stale: 0, unknown: 0, invalid: 0 };
+  const rows: Array<{ label: string; trust: TrustState; note: string | null; reasons: string[] }> =
+    [];
+  const recordResult = (label: string, result: IntegrityResult): void => {
+    rows.push({ label, trust: result.trust, note: result.note, reasons: result.reasons });
+    if (result.trust === "TRUSTED") {
+      counts.current += 1;
+    } else if (result.trust === "STALE") {
+      counts.stale += 1;
+    } else if (result.trust === "UNKNOWN") {
+      counts.unknown += 1;
+    } else if (result.trust === "INVALID") {
+      counts.invalid += 1;
+    }
+  };
+
+  const storage = new Storage(root);
+
+  // Facts — .ai/repository-analysis.json (provenance from the git.commit JSON
+  // field, unscoped by contract). Unreadable analysis is a corrupt repository
+  // state, reported INVALID, never silently skipped.
+  try {
+    const analysis = await store.loadAnalysis(root);
+    recordResult(
+      "repository-analysis.json",
+      await evaluateGitFactsIntegrity(analysis.git.commit ?? null, root, git),
+    );
+  } catch {
+    recordResult("repository-analysis.json", {
+      freshness: "INVALID",
+      trust: "INVALID",
+      note: null,
+      reasons: ["cannot read repository-analysis.json"],
+    });
+  }
+
+  // Intent — .dooz/plans/active/*.md and completed/*.md (## Baseline grammar).
+  for (const state of ["active", "completed"] as const) {
+    for (const file of await planStore.list(root, state)) {
+      const content = await readContextArtifact(storage, [".dooz", "plans", state, file]);
+      if (content === null) {
+        continue;
+      }
+      recordResult(`plans/${state}/${file}`, await evaluateDocumentIntegrity(content, root, git));
+    }
+  }
+
+  // History — .ai/sessions/*.md (## Baseline grammar).
+  for (const file of await storage.list(".ai", "sessions")) {
+    if (!file.endsWith(".md")) {
+      continue;
+    }
+    const content = await readContextArtifact(storage, [".ai", "sessions", file]);
+    if (content === null) {
+      continue;
+    }
+    recordResult(`sessions/${file}`, await evaluateDocumentIntegrity(content, root, git));
+  }
+
+  // Present state — .ai/current-context.md (## Baseline grammar).
+  const currentContext = await readContextArtifact(storage, [".ai", "current-context.md"]);
+  if (currentContext !== null) {
+    recordResult("current-context.md", await evaluateDocumentIntegrity(currentContext, root, git));
+  }
+
+  return { counts, rows };
+}
+
+/**
+ * Context validate (v3 P07): inventory the integrity-checkable artifacts at
+ * their contract-fixed locations (v3 A-4), evaluate each against the current
+ * repository with the integrity engine (P06), and report its trust state.
+ * Strictly read-only. Problems are STALE and INVALID artifacts; CURRENT and
+ * UNKNOWN rows are informational and never fail the command (D1).
+ */
+export async function buildContextValidateReport(
+  root: string,
+  planStore: PlanStore,
+  store: ContextValidateAnalysisStore,
+  git: IntegrityGit,
+): Promise<CommandReport> {
+  const markers: Record<TrustState, string> = {
+    TRUSTED: "✓",
+    STALE: "⚠",
+    UNKNOWN: "?",
+    INVALID: "✗",
+  };
+  const problems: string[] = [];
+  const { rows, counts } = await evaluateContextRows(root, planStore, store, git);
+
+  const lines: string[] = ["Context Integrity", ""];
+  for (const row of rows.sort((a, b) => (a.label < b.label ? -1 : a.label > b.label ? 1 : 0))) {
+    lines.push(`${markers[row.trust]} ${row.label} — ${row.trust}`);
+    if (row.trust === "TRUSTED" && row.note !== null) {
+      lines.push(`    ${row.note}`);
+    }
+    for (const reason of row.reasons) {
+      lines.push(`    ${reason}`);
+    }
+    if (row.trust === "STALE") {
+      problems.push(`stale: ${row.label}`);
+    } else if (row.trust === "INVALID") {
+      problems.push(`invalid: ${row.label}`);
+    }
+  }
+  lines.push(
+    "",
+    `Result: ${counts.stale} stale, ${counts.unknown} unknown, ${counts.invalid} invalid`,
+  );
+  return { report: lines.join("\n"), problems };
 }
 
 /** The stable human-readable message from an unknown error. */

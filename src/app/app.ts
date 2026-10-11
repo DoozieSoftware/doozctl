@@ -15,9 +15,16 @@ import {
   summarizePipeline,
   syncPipeline,
 } from "../engine/pipelines.js";
-import { buildStatusReport, buildVerifyReport } from "../engine/report.js";
+import {
+  buildContextValidateReport,
+  buildStatusReport,
+  buildVerifyReport,
+} from "../engine/report.js";
 import { formatSessionId, toLocalIso } from "../engine/session.js";
-import { isValidPlanId, planFilename, type Plan } from "../model/plan.js";
+import { evaluateDocumentIntegrity } from "../engine/integrity.js";
+import type { BaselineFields } from "../model/baseline.js";
+import { isValidPlanId, planFilename, planIdFromFilename, type Plan } from "../model/plan.js";
+import { scopeFromBaseline } from "../model/scope.js";
 import type { Manifest, SessionInput } from "../model/model.js";
 import { PlanStore } from "../store/plan-store.js";
 import { Storage } from "../store/storage.js";
@@ -177,6 +184,7 @@ export class App {
     }
 
     const now = this.deps.now();
+    const provenance = await this.activePlanProvenance(root);
     const input: SessionInput = {
       id: formatSessionId(now),
       date: toLocalIso(now),
@@ -184,6 +192,10 @@ export class App {
       tool: parsed.flags.tool ?? "",
       model: parsed.flags.model ?? "",
       user: parsed.flags.user ?? "",
+      sourcePlan: provenance.id,
+      planScopePaths: provenance.scopePaths,
+      planTrust: provenance.trust,
+      planDrift: provenance.drift,
     };
 
     const pkg = await this.deps.loader.load(standardsDir);
@@ -204,16 +216,54 @@ export class App {
     if (hasContext) {
       this.deps.print("✓ Updated current context");
     }
+    // v3 (P11, §13.1): a session whose plan is STALE reports so at handover
+    // time. Observation only — the exit code is unchanged and nothing is
+    // reconciled (§12: drift is surfaced, never resolved).
+    if (provenance.trust === "STALE") {
+      this.deps.print("");
+      this.deps.print(
+        `⚠ Plan '${provenance.id}' context is STALE — re-understand the described scope before continuing:`,
+      );
+      for (const reason of provenance.drift) {
+        this.deps.print(`  - ${reason}`);
+      }
+    }
     this.deps.print("");
     this.deps.print("Done.");
     return ExitCode.OK;
   }
 
   /**
+   * context validate: inventory the integrity-checkable artifacts and report
+   * each one's trust state against the current repository (v3 P07). Strictly
+   * read-only. STALE and INVALID artifacts are problems (D1); CURRENT and
+   * UNKNOWN rows are reported but never fail the command.
+   */
+  async contextValidate(args: string[]): Promise<number> {
+    const root = args[0] ?? ".";
+    const manifest = await this.loadManifestOrNull(root);
+    if (manifest === null) {
+      this.deps.print(UNINITIALIZED_REPOSITORY);
+      return ExitCode.Error;
+    }
+    const { report, problems } = await buildContextValidateReport(
+      root,
+      this.planStore,
+      this.deps.store,
+      this.deps.git,
+    );
+    this.deps.print(report);
+    return problems.length > 0 ? ExitCode.Error : ExitCode.OK;
+  }
+
+  /**
    * status: report the repository and its v2 control plane — repository
    * facts, initialization, the active plan (if any), its workflow, lifecycle
    * progress and next action. Strictly read-only: never writes, never
-   * re-analyzes on disk, never touches plans, sessions or git.
+   * re-analyzes on disk, never touches plans, sessions or git. V3-P09 adds
+   * the §12 plan-drift observation for a STALE active plan, consumed from the
+   * same P06 integrity evaluation as the Context block — observation only,
+   * never an exit-code change.
    */
   async status(args: string[]): Promise<number> {
     const root = args[0] ?? ".";
@@ -223,7 +273,14 @@ export class App {
       return ExitCode.Error;
     }
     const analysis = await this.deps.analyzer.analyze(root);
-    const { report, problems } = await buildStatusReport(root, analysis, manifest, this.planStore);
+    const { report, problems } = await buildStatusReport(
+      root,
+      analysis,
+      manifest,
+      this.planStore,
+      this.deps.store,
+      this.deps.git,
+    );
     this.deps.print(report);
     return problems.length > 0 ? ExitCode.Error : ExitCode.OK;
   }
@@ -232,7 +289,12 @@ export class App {
    * verify: determine whether the active Plan has the required evidence per
    * its adopted workflow (WORKFLOW-SPEC v1.1.0). Read-only: it checks the
    * presence of recorded evidence and git facts — it never runs commands,
-   * never judges quality, and never writes.
+   * never judges quality, and never writes. V3-P09 adds the §12 plan-drift
+   * observation for a STALE plan, consumed from the P06 integrity evaluation;
+   * it never gates READY/NOT READY. V3-P10 adds the §11 grounding qualifier
+   * to every evidence row (LIVE / recorded / STALE-BASELINE / S4 commit
+   * freshness) from the same evaluation — an annotation column; presence
+   * alone still gates the result.
    */
   async verify(args: string[]): Promise<number> {
     const root = args[0] ?? ".";
@@ -293,9 +355,68 @@ export class App {
       parsed.title === undefined
         ? { id, method: methodId }
         : { id, method: methodId, title: parsed.title },
+      await this.captureBaseline(root),
     );
     this.deps.print(this.formatPlanReport(plan));
     return ExitCode.OK;
+  }
+
+  /**
+   * v3 (P11): the active plan's handover provenance — its id, validated scope
+   * paths (A-6 carry-forward), and its P06 trust state with drift reasons
+   * (§13 stale-context qualifier). All-empty when no single active plan
+   * exists or the plan file cannot be read. Read-only and conservative by
+   * contract — a session never guesses which of several plans it belongs to.
+   * The plan document is only parsed and run through the existing integrity
+   * evaluator — never a new evaluation mechanism, and never a write.
+   */
+  private async activePlanProvenance(root: string): Promise<{
+    id: string;
+    scopePaths: string[];
+    trust: string;
+    drift: string[];
+  }> {
+    const empty = { id: "", scopePaths: [], trust: "", drift: [] as string[] };
+    const files = await this.planStore.list(root, "active");
+    if (files.length !== 1) {
+      return empty;
+    }
+    const file = files[0] as string;
+    const id = planIdFromFilename(file) ?? "";
+    if (id === "") {
+      return empty;
+    }
+    let content: string;
+    try {
+      content = await new Storage(root).read(".dooz", "plans", "active", file);
+    } catch {
+      return { id, scopePaths: [], trust: "", drift: [] };
+    }
+    const scope = scopeFromBaseline(content);
+    const integrity = await evaluateDocumentIntegrity(content, root, this.deps.git);
+    return { id, scopePaths: [...scope.paths], trust: integrity.trust, drift: integrity.reasons };
+  }
+
+  /**
+   * v3 provenance: the plan's creation baseline from live git facts, or
+   * undefined when not in a repository or HEAD has no commit yet — outside a
+   * git repository the plan carries no `## Baseline` section (v3 A-3). The
+   * plan is a mixed artifact, so ownership is declared. Detached HEAD
+   * records "(detached)" because the baseline's branch field is required.
+   */
+  private async captureBaseline(root: string): Promise<BaselineFields | undefined> {
+    const git = await this.deps.git.detect(root);
+    if (git === null || git.commit === null) {
+      return undefined;
+    }
+    return {
+      commit: git.commit,
+      branch: git.branch ?? "(detached)",
+      dirty: git.dirty ? "yes" : "no",
+      source: "none",
+      ownership: "mixed",
+      scopePaths: [],
+    };
   }
 
   /**

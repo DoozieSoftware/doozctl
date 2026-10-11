@@ -289,6 +289,36 @@ describe("renderPlan", () => {
       renderPlan({ id: "my-plan", method: "bug-fix", title: "Fix Login" }, "2026-08-13"),
     ).toContain("# Fix Login");
   });
+
+  it("renders an optional ## Baseline section after Metadata when given", () => {
+    const content = renderPlan({ id: "my-plan", method: "bug-fix" }, "2026-08-13", {
+      commit: "a1b2c3d",
+      branch: "main",
+      dirty: "no",
+      source: "none",
+      ownership: "mixed",
+      scopePaths: ["src/attendance/"],
+    });
+    expect(content).toContain("## Baseline");
+    expect(content).toContain("- commit: a1b2c3d");
+    expect(content).toContain("- branch: main");
+    expect(content).toContain("- dirty: no");
+    expect(content).toContain("- source: none");
+    expect(content).toContain("- ownership: mixed");
+    expect(content).toContain("- scope-path: src/attendance/");
+    // Baseline sits between Metadata and Objective.
+    expect(content.indexOf("## Metadata")).toBeLessThan(content.indexOf("## Baseline"));
+    expect(content.indexOf("## Baseline")).toBeLessThan(content.indexOf("## Objective"));
+    // The frozen four-field parse is untouched by the new section.
+    const parsed = parsePlan(content);
+    expect(parsed).toMatchObject({ id: "my-plan", method: "bug-fix", status: "PLANNED" });
+  });
+
+  it("omits the baseline section when none is given", () => {
+    const content = renderPlan({ id: "my-plan", method: "bug-fix" }, "2026-08-13");
+    expect(content).not.toContain("## Baseline");
+    expect(content).toContain("## Objective");
+  });
 });
 
 describe("setPlanStatus", () => {

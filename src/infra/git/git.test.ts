@@ -63,6 +63,42 @@ describe("GitService", () => {
     cleanup();
   });
 
+  it("reports the short HEAD commit the state describes", async () => {
+    const dir = makeRepo();
+    tempDirs.push(dir);
+    const info = await new GitService().detect(dir);
+    const expected = execFileSync("git", ["rev-parse", "--short", "HEAD"], { cwd: dir })
+      .toString()
+      .trim();
+    expect(info?.commit).toMatch(/^[0-9a-f]+$/);
+    expect(info?.commit).toBe(expected);
+    cleanup();
+  });
+
+  it("reports a commit even on a detached HEAD", async () => {
+    const dir = makeRepo();
+    tempDirs.push(dir);
+    execFileSync("git", ["checkout", "--detach"], { cwd: dir });
+    const info = await new GitService().detect(dir);
+    expect(info?.branch).toBeNull();
+    expect(info?.commit).toMatch(/^[0-9a-f]+$/);
+    cleanup();
+  });
+
+  it("reports no commit in a repository without commits", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "doozctl-git-empty-"));
+    tempDirs.push(dir);
+    execFileSync("git", ["init", "-b", "main"], { cwd: dir, stdio: "ignore" });
+    const info = await new GitService().detect(dir);
+    // An unborn HEAD has no commit yet and no resolvable branch (git itself
+    // errors on both reads) — the service reports null for each.
+    expect(info).not.toBeNull();
+    expect(info?.branch).toBeNull();
+    expect(info?.commit).toBeNull();
+    expect(info?.dirty).toBe(false);
+    cleanup();
+  });
+
   it("detects a repository from a nested directory", async () => {
     const dir = makeRepo();
     tempDirs.push(dir);
@@ -122,6 +158,76 @@ describe("GitService", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "doozctl-git-norepo-"));
     tempDirs.push(dir);
     await expect(new GitService().headTagged(dir)).resolves.toBe(false);
+    cleanup();
+  });
+});
+
+describe("GitService integrity primitives (v3 P06)", () => {
+  /** Create a repo, then commit a second change: modify a.txt and add b.txt. */
+  function repoWithSecondCommit(): { dir: string; first: string } {
+    const dir = makeRepo();
+    tempDirs.push(dir);
+    const first = execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir }).toString().trim();
+    writeFileSync(path.join(dir, "a.txt"), "changed");
+    writeFileSync(path.join(dir, "b.txt"), "new");
+    execFileSync("git", ["add", "-A"], { cwd: dir });
+    execFileSync("git", ["commit", "-q", "-m", "second"], { cwd: dir });
+    return { dir, first };
+  }
+
+  it("resolves short hashes and HEAD to full commit hashes", async () => {
+    const { dir, first } = repoWithSecondCommit();
+    const git = new GitService();
+    const head = await git.revParse(dir, "HEAD");
+    const full = await git.revParse(dir, first);
+    expect(head).toMatch(/^[0-9a-f]{40}$/);
+    expect(full).toMatch(/^[0-9a-f]{40}$/);
+    expect(full).not.toBe(head); // HEAD moved past the first commit
+    cleanup();
+  });
+
+  it("returns null for unresolvable revisions", async () => {
+    const dir = makeRepo();
+    tempDirs.push(dir);
+    await expect(new GitService().revParse(dir, "deadbeefdeadbeef")).resolves.toBeNull();
+    cleanup();
+  });
+
+  it("reports ancestry through merge-base", async () => {
+    const { dir, first } = repoWithSecondCommit();
+    const git = new GitService();
+    await expect(git.isAncestor(dir, first)).resolves.toBe(true);
+    await expect(git.isAncestor(dir, (await git.revParse(dir, "HEAD")) ?? "")).resolves.toBe(true);
+    await expect(git.isAncestor(dir, "0000000000000000000000000000000000000000")).resolves.toBe(
+      false,
+    );
+    cleanup();
+  });
+
+  it("lists exactly the paths changed since an older commit", async () => {
+    const { dir, first } = repoWithSecondCommit();
+    const git = new GitService();
+    const changed = await git.changedPathsSince(dir, first, []);
+    expect(changed).toContain("a.txt");
+    expect(changed).toContain("b.txt");
+    expect(changed).toHaveLength(2);
+    cleanup();
+  });
+
+  it("restricts the diff to the declared scope paths", async () => {
+    const { dir, first } = repoWithSecondCommit();
+    const git = new GitService();
+    const changed = await git.changedPathsSince(dir, first, ["b.txt"]);
+    expect(changed).toEqual(["b.txt"]);
+    expect(await git.changedPathsSince(dir, first, ["unrelated/"]).then((c) => c.length)).toBe(0);
+    cleanup();
+  });
+
+  it("reports whether a path exists at HEAD", async () => {
+    const { dir } = repoWithSecondCommit();
+    const git = new GitService();
+    await expect(git.pathExistsAtHead(dir, "a.txt")).resolves.toBe(true);
+    await expect(git.pathExistsAtHead(dir, "missing/file.ts")).resolves.toBe(false);
     cleanup();
   });
 });

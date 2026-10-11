@@ -45,6 +45,33 @@ describe("PlanStore.create", () => {
     expect(plan.content).toContain("# Fix Login");
   });
 
+  it("renders an optional baseline section when one is provided", async () => {
+    const root = await tmp();
+    const plan = await store.create(
+      root,
+      { id: "punch-sync", method: "bug-fix" },
+      {
+        commit: "a1b2c3d",
+        branch: "main",
+        dirty: "yes",
+        source: "none",
+        ownership: "mixed",
+      },
+    );
+    expect(plan.content).toContain("## Baseline");
+    expect(plan.content).toContain("- commit: a1b2c3d");
+    expect(plan.content).toContain("- branch: main");
+    expect(plan.content).toContain("- dirty: yes");
+    expect(plan.status).toBe("PLANNED");
+    expect(parsePlan(plan.content).content).toBe(plan.content);
+  });
+
+  it("omits the baseline section when none is provided", async () => {
+    const root = await tmp();
+    const plan = await store.create(root, { id: "plain", method: "bug-fix" });
+    expect(plan.content).not.toContain("## Baseline");
+  });
+
   it("is deterministic for the same input and clock", async () => {
     const a = await store.create(await tmp(), { id: "det", method: "bug-fix" });
     const b = await store.create(await tmp(), { id: "det", method: "bug-fix" });

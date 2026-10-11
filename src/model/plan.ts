@@ -5,7 +5,13 @@
  * parsed: id, method, status, created. Everything else is opaque content,
  * preserved verbatim. All functions here are pure and deterministic: no
  * clocks, no filesystem, no git.
+ *
+ * v3 (P04) adds an optional `## Baseline` provenance section rendered after
+ * `## Metadata` at creation only — the PLAN-SPEC v3 amendment (CONTEXT-SPEC
+ * §18.4). It is parsed only by the dedicated baseline grammar
+ * (`src/model/baseline.ts`); the frozen four-field parse is untouched.
  */
+import { renderBaseline, type BaselineFields } from "./baseline.js";
 
 /** The canonical lifecycle, in forward-only order. */
 export const PLAN_LIFECYCLE = [
@@ -223,9 +229,18 @@ function titleize(id: string): string {
 /**
  * Render the canonical plan template. Deterministic for the same input; the
  * creation date is injected by the caller so rendering stays pure.
+ *
+ * When `baseline` is given, an optional `## Baseline` provenance section is
+ * rendered between `## Metadata` and `## Objective` (v3 A-4.2). Without it the
+ * output is byte-identical to the v2 template — old plans and non-git
+ * creations carry no baseline.
  */
-export function renderPlan(input: PlanTemplateInput, created: string): string {
-  return [
+export function renderPlan(
+  input: PlanTemplateInput,
+  created: string,
+  baseline?: BaselineFields,
+): string {
+  const doc: string[] = [
     `# ${input.title ?? titleize(input.id)}`,
     "",
     "## Metadata",
@@ -234,6 +249,11 @@ export function renderPlan(input: PlanTemplateInput, created: string): string {
     `- method: ${input.method}`,
     `- status: PLANNED`,
     `- created: ${created}`,
+  ];
+  if (baseline !== undefined) {
+    doc.push("", ...renderBaseline(baseline).split("\n"));
+  }
+  doc.push(
     "",
     "## Objective",
     "",
@@ -263,7 +283,8 @@ export function renderPlan(input: PlanTemplateInput, created: string): string {
     "",
     "## Next Action",
     "",
-  ].join("\n");
+  );
+  return doc.join("\n");
 }
 
 /**

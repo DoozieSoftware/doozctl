@@ -192,6 +192,7 @@ export class RepositoryAnalyzer implements Analyzer {
         isRepository: gitInfo !== null,
         branch: gitInfo?.branch ?? null,
         dirty: gitInfo?.dirty ?? false,
+        commit: gitInfo?.commit ?? null,
       },
       languages: this.detectLanguages(files),
       frameworks: await this.detectFrameworks(root, files),

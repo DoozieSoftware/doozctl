@@ -359,3 +359,59 @@ plans eventually make this painful, solve that problem then — not now.
 
 Completed plans are never deleted automatically. They become engineering
 history. Keep them compact.
+
+---
+
+# V3 Amendment — Optional `## Baseline` Provenance (P04)
+
+**Amendment version:** v3.0 (DoozCTL v3, work package P04). This section is a
+versioned v3 amendment to this frozen v2 specification, following the
+WORKFLOW-SPEC amendment precedent: one optional section added, the order of
+existing sections untouched, old plans parse identically.
+
+The v3 context-integrity contract (CONTEXT-SPEC §5, §18.4; v3 ARCHITECTURE
+§4.2) requires every integrity-checkable artifact to declare the repository
+state it was produced from. For plans, that declaration is an optional
+`## Baseline` section rendered by the engine **between `## Metadata` and
+`## Objective` at creation only**, when the plan is created inside a git
+repository:
+
+```markdown
+## Metadata
+
+- id: attendance-punch-sync
+- method: bug-fix
+- status: PLANNED
+- created: 2026-08-13
+
+## Baseline
+
+- commit: a1b2c3d
+- branch: main
+- dirty: no
+- source: none
+- ownership: mixed
+
+## Objective
+```
+
+Amendment rules:
+
+1. **Optional and backward-compatible.** A plan without `## Baseline` (v2
+   plans, plans created outside git) parses identically under the frozen v2
+   metadata contract and evaluates as `UNKNOWN`, never `INVALID`, by v3
+   integrity checks.
+2. **The frozen four-field parse is untouched.** The new section is parsed
+   only by the v3 baseline grammar (`src/model/baseline.ts`), which locates
+   sections by `^## Baseline` heading, not by position.
+3. **Captured at creation only, never silently refreshed.** Refreshing an
+   existing plan's baseline is a v3 reconcile action that v3.0 does not
+   automate. `scope-path` lines and other authored content may be added to the
+   section by humans/agents; the engine validates them (v3 P05).
+4. **Written by the engine.** Rendering is additive at the app/store boundary
+   (`renderPlan`, `PlanStore.create`); the store stays pure with its `{now}`
+   dependency only.
+
+The baseline stores deterministic git facts only — commit, branch, dirty —
+plus optional scope, source and ownership declarations. No wall-clock values
+enter stored state (v3 CONTEXT-SPEC §17).

@@ -52,7 +52,8 @@ function registerCommands(dispatcher: Dispatcher, app: App): void {
     .register("summarize", app.summarize.bind(app))
     .register("status", app.status.bind(app))
     .register("plan", app.plan.bind(app))
-    .register("verify", app.verify.bind(app));
+    .register("verify", app.verify.bind(app))
+    .register("context validate", app.contextValidate.bind(app));
 }
 
 /** Help overrides: the plan command sources its default method from the contract. */

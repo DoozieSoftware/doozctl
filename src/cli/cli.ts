@@ -72,6 +72,12 @@ const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     usage: "doozctl status [repo]",
     example: "doozctl status .",
   },
+  "context validate": {
+    description: "Validate repository context integrity against the current state. Read-only.",
+    argumentDescription: "the repository path",
+    usage: "doozctl context validate [repo]",
+    example: "doozctl context validate .",
+  },
   verify: {
     description: "Verify the active Plan's required evidence. Read-only.",
     argumentDescription: "the repository path",
@@ -211,7 +217,23 @@ export function buildProgram(
 
   const helpMap: Readonly<Record<string, CommandHelp>> = { ...COMMAND_HELP, ...helpOverrides };
   for (const name of dispatcher.commands()) {
-    const command = program.command(name);
+    // A registered name containing a space becomes a parent command with leaf
+    // commands (v3 A-7): "context validate" nests under "context". The
+    // dispatcher itself is unchanged — the leaf action dispatches the full
+    // registered name.
+    const parts = name.split(" ");
+    let command: Command;
+    if (parts.length === 1) {
+      command = program.command(name);
+    } else {
+      let parent = program.commands.find((existing) => existing.name() === (parts[0] as string));
+      if (parent === undefined) {
+        parent = program
+          .command(parts[0] as string)
+          .description("Validate repository context integrity. Read-only.");
+      }
+      command = parent.command(parts.slice(1).join(" "));
+    }
     const help = helpMap[name];
     if (help !== undefined) {
       command

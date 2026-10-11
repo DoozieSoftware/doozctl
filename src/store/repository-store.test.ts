@@ -10,7 +10,7 @@ const manifest: Manifest = { version: 1, artifacts: ["AGENTS.md"] };
 
 const analysis: Analysis = {
   root: "/repo",
-  git: { isRepository: true, branch: "main", dirty: false },
+  git: { isRepository: true, branch: "main", dirty: false, commit: "abc123" },
   languages: ["TypeScript"],
   frameworks: [],
   buildSystem: null,

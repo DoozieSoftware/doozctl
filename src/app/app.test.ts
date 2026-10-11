@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -677,6 +678,28 @@ describe("App plan", () => {
     await mkdir(base, { recursive: true });
     await writeFile(path.join(base, `${id}.md`), content, "utf-8");
   };
+
+  it("captures a live git baseline when the repository is a git repository", async () => {
+    const dir = await tmp();
+    await adoptWorkflow(dir, "standard");
+    execFileSync("git", ["init", "-b", "main"], { cwd: dir, stdio: "ignore" });
+    execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: dir });
+    execFileSync("git", ["config", "user.name", "Test"], { cwd: dir });
+    execFileSync("git", ["add", "-A"], { cwd: dir });
+    execFileSync("git", ["commit", "-m", "init"], { cwd: dir, stdio: "ignore" });
+    const app = new App(new Engine(), buildDeps().deps);
+
+    await expect(app.plan([dir])).resolves.toBe(0);
+    const content = await readFile(path.join(active(dir), "2026-08-09-standard.md"), "utf-8");
+    expect(content).toContain("## Baseline");
+    expect(content).toMatch(/- commit: [0-9a-f]+/);
+    expect(content).toContain("- branch: main");
+    expect(content).toContain("- dirty: no");
+    expect(content).toContain("- source: none");
+    expect(content).toContain("- ownership: mixed");
+    // The baseline section never breaks the frozen metadata parse.
+    expect(content.indexOf("## Baseline")).toBeLessThan(content.indexOf("## Objective"));
+  });
 
   it("creates a plan with the default method and a concise report", async () => {
     const dir = await tmp();

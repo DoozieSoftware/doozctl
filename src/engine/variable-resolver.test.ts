@@ -6,7 +6,7 @@ import { resolveVariables } from "./variable-resolver.js";
 function analysis(overrides: Partial<Analysis> = {}): Analysis {
   return {
     root: "/tmp/repo",
-    git: { isRepository: true, branch: "main", dirty: false },
+    git: { isRepository: true, branch: "main", dirty: false, commit: "abc123" },
     languages: ["TypeScript"],
     frameworks: ["React"],
     buildSystem: "vite",
@@ -29,7 +29,7 @@ describe("resolveVariables", () => {
       },
       repository: {
         root: "/tmp/repo",
-        git: { isRepository: true, branch: "main", dirty: false },
+        git: { isRepository: true, branch: "main", dirty: false, commit: "abc123" },
         statistics: { totalFiles: 10, sourceFiles: 5, testFiles: 1 },
       },
       build: {
@@ -61,7 +61,7 @@ describe("resolveVariables", () => {
       },
       repository: {
         root: "/tmp/repo",
-        git: { isRepository: true, branch: "main", dirty: false },
+        git: { isRepository: true, branch: "main", dirty: false, commit: "abc123" },
         statistics: { totalFiles: 10, sourceFiles: 5, testFiles: 1 },
       },
       build: {

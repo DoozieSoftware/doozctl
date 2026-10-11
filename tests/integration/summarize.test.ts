@@ -11,6 +11,7 @@ import {
   DefaultValidator,
 } from "../../src/engine/contracts.js";
 import { GitService } from "../../src/infra/git/git.js";
+import { renderPlan, setPlanStatus } from "../../src/model/plan.js";
 import { RepositoryStore } from "../../src/store/repository-store.js";
 
 /**
@@ -99,6 +100,12 @@ async function writeSummarizePackage(pkg: string): Promise<void> {
       "- User: {{session.user}}",
       "- Commit: {{session.commit}}",
       "- Branch: {{session.branch}}",
+      "- Dirty: {{session.dirty}}",
+      "- Source: {{session.source}}",
+      "",
+      "{{session.baseline}}",
+      "",
+      "{{session.planContext}}",
       "",
       "{{session.content}}",
     ].join("\n") + "\n",
@@ -107,6 +114,7 @@ async function writeSummarizePackage(pkg: string): Promise<void> {
   await writeFile(
     path.join(pkg, "artifacts", "current-context.md"),
     [
+      "{{session.contextBaseline}}",
       "# Current Objective",
       "{{session.objective}}",
       "",
@@ -281,5 +289,139 @@ describe("doozctl summarize (integration)", () => {
 
   it("rejects summarize without a repository, package and session file", async () => {
     await expect(app().summarize([])).rejects.toThrow(/summarize requires a repository path/);
+  });
+
+  it("carries provenance and a stale-context qualifier at handover for a STALE plan (A-4)", async () => {
+    const repo = await tmp("doozctl-summary-repo-");
+    const pkg = await tmp("doozctl-summary-pkg-");
+    await writeRepo(repo);
+    await writeSummarizePackage(pkg);
+
+    const { execSync } = await import("node:child_process");
+    const run = (cmd: string): string => execSync(cmd, { cwd: repo, encoding: "utf8" }).trim();
+    run("git init -q");
+    run("git add -A");
+    run('git -c user.email=test@example.com -c user.name=Test commit -q -m "X"');
+    const baseline = run("git rev-parse --short HEAD");
+
+    // An active plan baselined at X, scoped to src/.
+    const active = path.join(repo, ".dooz", "plans", "active");
+    await mkdir(active, { recursive: true });
+    await writeFile(
+      path.join(active, "2026-08-13-attendance-punch-sync.md"),
+      setPlanStatus(
+        renderPlan({ id: "attendance-punch-sync", method: "bug-fix" }, "2026-08-13", {
+          commit: baseline,
+          branch: "main",
+          dirty: "no",
+          source: "none",
+          ownership: "mixed",
+          scopePaths: ["src/"],
+        }),
+        "EXECUTING",
+      ),
+      "utf-8",
+    );
+
+    // A scoped change at Y makes the plan STALE (S2).
+    await writeFile(path.join(repo, "src", "main.ts"), "export const changed = true;\n", "utf-8");
+    run("git add -A");
+    run('git -c user.email=test@example.com -c user.name=Test commit -q -m "Y"');
+
+    const file = await sessionFile(repo, "## Summary\nhanded over at Y\n");
+    const printed: string[] = [];
+    const out = app((message) => printed.push(message));
+    await out.init([repo, pkg]);
+    const code = await out.summarize([repo, pkg, file]);
+    expect(code).toBe(0);
+
+    // The handover qualifier is surfaced at summarize time (§13.1).
+    expect(printed.join("\n")).toContain(
+      "⚠ Plan 'attendance-punch-sync' context is STALE — re-understand the described scope before continuing:",
+    );
+    expect(printed.join("\n")).toContain("src/main.ts changed since baseline");
+
+    // The session record carries its own baseline block, labeled by its
+    // plan source, with the plan's scope paths inherited (A-6).
+    const session = await readFile(
+      path.join(repo, ".ai", "sessions", "2026-08-09_093000.md"),
+      "utf-8",
+    );
+    expect(session).toContain("## Baseline");
+    expect(session).toContain("- commit: ");
+    // init wrote .ai/ files after commit Y, so the handover itself is a dirty
+    // observation — the qualifier is recorded faithfully, never hidden.
+    expect(session).toContain("- Dirty: yes");
+    expect(session).toContain("- source: plan:attendance-punch-sync");
+    expect(session).toContain("- scope-path: src/");
+    expect(session).toContain(
+      "Known stale context: plan 'attendance-punch-sync' is STALE — re-understand the described scope before continuing.",
+    );
+
+    // current-context carries the machine block labeled by its session source.
+    const context = await readFile(path.join(repo, ".ai", "current-context.md"), "utf-8");
+    expect(context.startsWith("## Baseline")).toBe(true);
+    expect(context).toContain("- source: session:2026-08-09_093000");
+    expect(context).toContain("- scope-path: src/");
+  });
+
+  it("keeps handover unqualified for a CURRENT plan and emits no provenance outside git", async () => {
+    const repo = await tmp("doozctl-summary-repo-");
+    const pkg = await tmp("doozctl-summary-pkg-");
+    await writeRepo(repo);
+    await writeSummarizePackage(pkg);
+
+    const { execSync } = await import("node:child_process");
+    const run = (cmd: string): string => execSync(cmd, { cwd: repo, encoding: "utf8" }).trim();
+    run("git init -q");
+    run("git add -A");
+    run('git -c user.email=test@example.com -c user.name=Test commit -q -m "X"');
+    const baseline = run("git rev-parse --short HEAD");
+
+    // A plan baselined at the tip (CURRENT/TRUSTED — no scoped change since).
+    const active = path.join(repo, ".dooz", "plans", "active");
+    await mkdir(active, { recursive: true });
+    await writeFile(
+      path.join(active, "2026-08-13-attendance-punch-sync.md"),
+      renderPlan({ id: "attendance-punch-sync", method: "bug-fix" }, "2026-08-13", {
+        commit: baseline,
+        branch: "main",
+        dirty: "no",
+        source: "none",
+        ownership: "mixed",
+        scopePaths: ["src/"],
+      }),
+      "utf-8",
+    );
+
+    const file = await sessionFile(repo, "## Summary\nhanded over at tip\n");
+    const printed: string[] = [];
+    const out = app((message) => printed.push(message));
+    await out.init([repo, pkg]);
+    await out.summarize([repo, pkg, file]);
+    expect(printed.join("\n")).not.toContain("STALE");
+
+    const session = await readFile(
+      path.join(repo, ".ai", "sessions", "2026-08-09_093000.md"),
+      "utf-8",
+    );
+    expect(session).toContain("## Baseline");
+    expect(session).toContain("- source: plan:attendance-punch-sync");
+    expect(session).not.toContain("Known stale context");
+
+    // A gitless summarize (pkg without the plan) emits no baseline block and
+    // no warning — the artifacts stay baseline-less, never INVALID.
+    const bare = await tmp("doozctl-summary-bare-");
+    await writeRepo(bare);
+    const bareFile = await sessionFile(bare, "## Summary\nno git\n");
+    await app().init([bare, pkg]);
+    await app().summarize([bare, pkg, bareFile]);
+    const bareSession = await readFile(
+      path.join(bare, ".ai", "sessions", "2026-08-09_093000.md"),
+      "utf-8",
+    );
+    expect(bareSession).not.toContain("## Baseline");
+    const bareContext = await readFile(path.join(bare, ".ai", "current-context.md"), "utf-8");
+    expect(bareContext.startsWith("## Baseline")).toBe(false);
   });
 });

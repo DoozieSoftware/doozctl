@@ -1,3 +1,4 @@
+import type { BaselineFields } from "../model/baseline.js";
 import {
   formatPlanDate,
   isValidPlanId,
@@ -46,8 +47,13 @@ export class PlanStore {
   /**
    * Create a new plan in active/ at PLANNED. Fails if a plan with the same
    * id and creation date already exists.
+   *
+   * `baseline` is the optional v3 provenance captured at creation (live git
+   * facts, read by the app layer and passed in — the store stays pure with
+   * its `{now}` dependency only). Outside a git repository it is undefined
+   * and the `## Baseline` section is omitted (v3 A-3).
    */
-  async create(root: string, input: PlanTemplateInput): Promise<Plan> {
+  async create(root: string, input: PlanTemplateInput, baseline?: BaselineFields): Promise<Plan> {
     if (!isValidPlanId(input.id)) {
       throw new Error(`invalid plan id: ${input.id}`);
     }
@@ -61,7 +67,7 @@ export class PlanStore {
     if (await storage.exists(...parts)) {
       throw new Error(`plan already exists: ${input.id}`);
     }
-    const content = renderPlan(input, created);
+    const content = renderPlan(input, created, baseline);
     await storage.atomicWrite(content, ...parts);
     return parsePlan(content);
   }

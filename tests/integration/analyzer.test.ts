@@ -51,7 +51,12 @@ describe("RepositoryAnalyzer (integration)", () => {
   it("detects git facts from a real repository", async () => {
     const dir = makeRepo();
     const analysis = await new RepositoryAnalyzer({ git: new GitService() }).analyze(dir);
-    expect(analysis.git).toEqual({ isRepository: true, branch: "main", dirty: false });
+    expect(analysis.git).toEqual({
+      isRepository: true,
+      branch: "main",
+      dirty: false,
+      commit: expect.stringMatching(/^[0-9a-f]+$/),
+    });
     expect(path.resolve(analysis.root)).toBe(path.resolve(gitRoot(dir)));
     cleanup();
   });

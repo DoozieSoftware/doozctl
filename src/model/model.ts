@@ -29,6 +29,14 @@ export interface GitFacts {
   branch: string | null;
   /** Whether the working tree differs from HEAD. */
   dirty: boolean;
+  /**
+   * Short HEAD hash the analysis describes, or null when not a repository,
+   * the repository has no commits yet, or the read failed. v3 baseline
+   * (CONTEXT-SPEC §5). v2-era analysis files without this key parse without
+   * it; readers tolerate absence with `?? null` and treat the artifact as
+   * having no baseline (never INVALID).
+   */
+  commit: string | null;
 }
 
 /** File counts used to size the repository. */
@@ -117,4 +125,28 @@ export interface SessionInput {
   model: string;
   /** User who ran the session, or "". */
   user: string;
+  /**
+   * v3 provenance: the plan id the session was written against, or "" when
+   * no single active plan exists. Resolved by the app layer (which knows the
+   * active plan) and exposed to templates as `session.source` =
+   * `plan:<id>` / "" (CONTEXT-SPEC §5.2, v3 A-3).
+   */
+  sourcePlan: string;
+  /**
+   * v3 (P11, A-6): the active plan's validated scope paths, carried forward
+   * into the session/current-context baseline blocks so the handover chain
+   * inherits the plan's described scope, or [] when no single active plan
+   * exists or the plan declares none. Pure parse of the plan document — no
+   * evaluation.
+   */
+  planScopePaths: string[];
+  /**
+   * v3 (P11, §13): the active plan's P06 trust state token, or "" when no
+   * single active plan exists or it cannot be evaluated. Drives the
+   * stale-context qualifier at handover. Consumed read-only — the existing
+   * integrity evaluation, never a new one.
+   */
+  planTrust: string;
+  /** v3 (P11): the plan's deterministic drift reasons when trust is STALE. */
+  planDrift: string[];
 }

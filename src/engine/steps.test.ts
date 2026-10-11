@@ -69,7 +69,7 @@ const validManifest = {
 function minimalAnalysis(root: string): Analysis {
   return {
     root,
-    git: { isRepository: false, branch: null, dirty: false },
+    git: { isRepository: false, branch: null, dirty: false, commit: null },
     languages: [],
     frameworks: [],
     buildSystem: null,
@@ -180,7 +180,7 @@ describe("pipeline steps", () => {
     ]);
     expect(ctx.variables["analysis"]).toEqual({ language: [], framework: [], tests: null });
     expect(ctx.variables["repository"]).toMatchObject({
-      git: { isRepository: false, branch: null, dirty: false },
+      git: { isRepository: false, branch: null, dirty: false, commit: null },
     });
   });
 
@@ -406,7 +406,12 @@ describe("pipeline steps", () => {
         sessionStep(
           {
             git: {
-              commitHash: async () => "abc123",
+              detect: async () => ({
+                root: repo,
+                branch: "main",
+                dirty: false,
+                commit: "abc123",
+              }),
             } as never,
           },
           {
@@ -416,6 +421,10 @@ describe("pipeline steps", () => {
             tool: "claude",
             model: "opus",
             user: "akshay",
+            sourcePlan: "attendance-punch-sync",
+            planScopePaths: ["src/attendance/"],
+            planTrust: "STALE",
+            planDrift: ["src/attendance/PunchService.php changed since baseline 'abc123'"],
           },
         ),
       ],
@@ -428,9 +437,38 @@ describe("pipeline steps", () => {
       model: "opus",
       user: "akshay",
       commit: "abc123",
+      branch: "main",
+      dirty: "no",
+      source: "plan:attendance-punch-sync",
       objective: "Old goal.",
       summary: "Built the widget.",
       openQuestions: "Who owns it?",
+      // v3 (P11): the machine-provenance blocks carry the plan's scope paths
+      // forward, labeled by their source; the stale plan qualifies the record.
+      baseline: [
+        "## Baseline",
+        "",
+        "- commit: abc123",
+        "- branch: main",
+        "- dirty: no",
+        "- source: plan:attendance-punch-sync",
+        "- ownership: mixed",
+        "- scope-path: src/attendance/",
+      ].join("\n"),
+      contextBaseline: [
+        "## Baseline",
+        "",
+        "- commit: abc123",
+        "- branch: main",
+        "- dirty: no",
+        "- source: session:2026-08-09_093000",
+        "- ownership: mixed",
+        "- scope-path: src/attendance/",
+      ].join("\n"),
+      planContext: [
+        "Known stale context: plan 'attendance-punch-sync' is STALE — re-understand the described scope before continuing.",
+        "- src/attendance/PunchService.php changed since baseline 'abc123'",
+      ].join("\n"),
     });
   });
 
@@ -458,7 +496,7 @@ describe("pipeline steps", () => {
           sessionStep(
             {
               git: {
-                commitHash: async () => null,
+                detect: async () => null,
               } as never,
             },
             {
@@ -468,6 +506,10 @@ describe("pipeline steps", () => {
               tool: "",
               model: "",
               user: "",
+              sourcePlan: "",
+              planScopePaths: [],
+              planTrust: "",
+              planDrift: [],
             },
           ),
         ],
@@ -842,7 +884,7 @@ describe("pipeline steps", () => {
         sessionStep(
           {
             git: {
-              commitHash: async () => null,
+              detect: async () => null,
             } as never,
           },
           {
@@ -852,6 +894,10 @@ describe("pipeline steps", () => {
             tool: "",
             model: "",
             user: "",
+            sourcePlan: "",
+            planScopePaths: [],
+            planTrust: "",
+            planDrift: [],
           },
         ),
         async (c) => {
@@ -860,8 +906,51 @@ describe("pipeline steps", () => {
       ],
       { root: repo },
     );
-    const session = seen as { content: string };
+    const session = seen as { content: string; baseline: string; planContext: string };
     expect(session.content.length).toBeLessThan(13 * 1024);
     expect(session.content).toContain("[truncated");
+    // Gitless handover: no provenance block and no qualifier — the artifacts
+    // stay UNKNOWN, never INVALID (v3 P11).
+    expect(session.baseline).toBe("");
+    expect(session.planContext).toBe("");
+  });
+
+  it("session step renders provenance blocks but qualifies only a STALE plan", async () => {
+    const repo = await tmp();
+    const ctx = await runSteps(
+      [
+        async (c) => {
+          c.artifacts = [];
+          c.analysis = minimalAnalysis(repo);
+        },
+        sessionStep(
+          {
+            git: {
+              detect: async () => ({ root: repo, branch: "main", dirty: false, commit: "abc123" }),
+            } as never,
+          },
+          {
+            id: "2026-08-09_093000",
+            date: "2026-08-09T09:30:00+08:00",
+            content: "## Summary\nok\n",
+            tool: "",
+            model: "",
+            user: "",
+            sourcePlan: "punch",
+            planScopePaths: [],
+            planTrust: "TRUSTED",
+            planDrift: [],
+          },
+        ),
+      ],
+      { root: repo },
+    );
+    const session = ctx.variables.session as Record<string, string>;
+    // A CURRENT/TRUSTED plan never qualifies the record (§13.4 is about stale
+    // context only); the carry-forward blocks still carry their labels.
+    expect(session.planContext).toBe("");
+    expect(session.baseline).toContain("- source: plan:punch");
+    expect(session.baseline).not.toContain("scope-path");
+    expect(session.contextBaseline).toContain("- source: session:2026-08-09_093000");
   });
 });
